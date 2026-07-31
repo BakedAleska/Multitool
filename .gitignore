@@ -1,0 +1,31 @@
+userdata/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tooling
+.mypy_cache/
+.ruff_cache/
+
+# Editors
+.vscode/
+.idea/
