@@ -1,31 +1,25 @@
-userdata/
-
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Distribution / packaging
+*.pyc
+*.pyo
+*.egg-info/
 build/
 dist/
-*.egg-info/
-.eggs/
 
-# Virtual environments
+# Virtual environment
 .venv/
-venv/
-env/
 
-# Testing / coverage
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Tooling
-.mypy_cache/
+# Tooling caches
 .ruff_cache/
 
-# Editors
-.vscode/
-.idea/
+# Editor / AI tool config — keep the portable, team-useful bits tracked
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+.claude/
+
+# OS junk
+.DS_Store
+
+# Local planning/notes — not published
+plan.md
