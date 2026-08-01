@@ -14,5 +14,5 @@ def DashboardView(page: ft.Page) -> ft.View:
         route="/",
         padding=0,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-        controls=[build_layout(page, content, selected_index=0)],
+        controls=[build_layout(page, content)],
     )
