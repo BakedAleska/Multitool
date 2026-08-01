@@ -1,0 +1,5 @@
+# Requires Python 3.13 (matches pyproject.toml's ruff target-version).
+# flet>=0.86.4 alone requires at least Python 3.10.
+flet>=0.86.4
+httpx>=0.28.1
+pywebview>=6.2.1
