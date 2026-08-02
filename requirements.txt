@@ -3,3 +3,4 @@
 flet>=0.86.4
 httpx>=0.28.1
 pywebview>=6.2.1
+pynput>=1.7.7

@@ -4,8 +4,7 @@ Its UI is built with Flet, same as any widget: Flet can only render
 controls from Python code running on its own event loop, so that part
 stays Python no matter what. The actual clicking, though, runs entirely
 outside Python, as a platform-native script this file starts, stops, and
-reads status from over stdout (see multitool/widgets/process.py). This is
-the first widget built against that any-language-backend pattern.
+reads status from over stdout (see multitool/widgets/process.py).
 
 - Windows: backend/click_windows.ps1, a PowerShell script that calls
   user32.dll's mouse_event directly. No extra dependencies.
@@ -13,10 +12,23 @@ the first widget built against that any-language-backend pattern.
   cliclick (`brew install cliclick`), since AppleScript/System Events
   can't post synthetic clicks at an arbitrary screen position without it.
 
+Two more backends run alongside the click loop, both cross-platform
+Python scripts started the same "external process, JSON over stdout"
+way:
+
+- backend/keybind_listener.py, using pynput to listen system-wide for
+  configured start/stop hotkeys, so clicking can be toggled without
+  switching focus back to Multitool.
+- backend/overlay.py, a small always-on-top tkinter window shown while
+  clicking is active, so it's visible even when Multitool itself is in
+  the background.
+
 To try this widget locally, copy this folder into WIDGETS_DIR (the path
 shown in Settings -> Widgets).
 """
 
+import json
+import re
 import sys
 from pathlib import Path
 
@@ -24,19 +36,108 @@ import flet as ft
 
 from multitool.state import get_widget_setting, set_widget_setting
 from multitool.ui.layout import build_layout, widget_route
+from multitool.ui.toast import show_toast
 from multitool.widgets.api import Widget
 from multitool.widgets.process import WidgetProcess, start_process, stop_process
 
 BACKEND_DIR = Path(__file__).parent / "backend"
 
 WIDGET_ID = "autoclicker"
-_PROCESS_KEY = f"_{WIDGET_ID}_process"
+_CLICK_PROCESS_KEY = f"_{WIDGET_ID}_click_process"
+_LISTENER_PROCESS_KEY = f"_{WIDGET_ID}_listener_process"
+_LISTENER_CONFIG_KEY = f"_{WIDGET_ID}_listener_config"
+_OVERLAY_PROCESS_KEY = f"_{WIDGET_ID}_overlay_process"
 
-DEFAULT_INTERVAL_MS = 100
+DEFAULT_CPS = 10
+CPS_MIN = 1
+CPS_MAX = 20
+"""Honest bounds for clicks-per-second, not just a round number.
+
+20 CPS is a 50ms interval, which stays comfortably above the ~15.6ms
+tick Windows' default scheduler resolution allows, so the backend script
+can actually hit the rate it's asked for (it also raises the timer
+resolution to 1ms itself, but that's a best-effort request, not a
+guarantee). Higher than this and the reported click count starts
+drifting from the requested rate rather than reflecting a real limit
+worth exposing in the UI.
+"""
+
+DEFAULT_BUTTON = "left"
+RANDOMIZE_PERCENT = 15
+"""Jitter applied per click when "Randomize timing" is on, as a percent
+of the base interval in either direction."""
+
+DEFAULT_SHOW_INDICATOR = True
+DEFAULT_RANDOMIZE_TIMING = True
+
+_FUNCTION_KEY_RE = re.compile(r"^F([1-9]|1[0-9]|2[0-4])$")
+
+_SPECIAL_KEY_MAP = {
+    "Escape": "esc",
+    "Enter": "enter",
+    "Space": "space",
+    "Tab": "tab",
+    "Backspace": "backspace",
+    "Delete": "delete",
+    "Insert": "insert",
+    "Home": "home",
+    "End": "end",
+    "Page Up": "page_up",
+    "Page Down": "page_down",
+    "Arrow Up": "up",
+    "Arrow Down": "down",
+    "Arrow Left": "left",
+    "Arrow Right": "right",
+}
 
 
-def _backend_command(interval_ms: int, button: str) -> list[str]:
+def _keyboard_event_to_hotkey(e: ft.KeyboardEvent) -> tuple[str, str] | None:
+    """Convert a Flet key press into a (label, pynput hotkey string) pair.
+
+    Returns None if the key alone isn't a usable hotkey, e.g. a modifier
+    pressed on its own with nothing else.
+    """
+    key = e.key
+    if key in ("Shift", "Control", "Alt", "Meta"):
+        return None
+
+    if len(key) == 1 and key.isalnum():
+        main_token = key.lower()
+        main_label = key.upper()
+    elif _FUNCTION_KEY_RE.match(key):
+        main_token = key.lower()
+        main_label = key
+    elif key in _SPECIAL_KEY_MAP:
+        main_token = _SPECIAL_KEY_MAP[key]
+        main_label = key
+    else:
+        return None
+
+    tokens = []
+    labels = []
+    if e.ctrl:
+        tokens.append("<ctrl>")
+        labels.append("Ctrl")
+    if e.alt:
+        tokens.append("<alt>")
+        labels.append("Alt")
+    if e.shift:
+        tokens.append("<shift>")
+        labels.append("Shift")
+    if e.meta:
+        tokens.append("<cmd>")
+        labels.append("Win" if sys.platform == "win32" else "Cmd")
+
+    tokens.append(main_token if len(main_token) == 1 else f"<{main_token}>")
+    labels.append(main_label)
+
+    return "+".join(labels), "+".join(tokens)
+
+
+def _click_backend_command(cps: int, button: str, randomize: bool) -> list[str]:
     """The platform-specific command that runs the click loop."""
+    interval_ms = round(1000 / cps)
+    randomize_percent = RANDOMIZE_PERCENT if randomize else 0
     if sys.platform == "win32":
         return [
             "powershell",
@@ -49,43 +150,96 @@ def _backend_command(interval_ms: int, button: str) -> list[str]:
             str(interval_ms),
             "-Button",
             button,
+            "-RandomizePercent",
+            str(randomize_percent),
         ]
     return [
         "/bin/bash",
         str(BACKEND_DIR / "click_macos.sh"),
         str(interval_ms),
+        button,
+        str(randomize_percent),
     ]
 
 
+def _keybind_listener_command(start_hotkeys: list[str], stop_hotkeys: list[str]) -> list[str]:
+    """The command that starts `backend/keybind_listener.py`.
+
+    Each hotkey list is passed as a JSON-encoded argument, matching what
+    that script expects to parse from `sys.argv`.
+    """
+    return [
+        sys.executable,
+        str(BACKEND_DIR / "keybind_listener.py"),
+        json.dumps(start_hotkeys),
+        json.dumps(stop_hotkeys),
+    ]
+
+
+def _overlay_command() -> list[str]:
+    """The command that starts the on-screen "running" indicator process."""
+    return [sys.executable, str(BACKEND_DIR / "overlay.py")]
+
+
 def build_view(page: ft.Page) -> ft.View:
-    """The Autoclicker's own screen: interval, mouse button, start/stop."""
-    default_interval = get_widget_setting(
-        page, WIDGET_ID, "default_interval_ms", DEFAULT_INTERVAL_MS
+    """The Autoclicker's own screen: CPS, button, keybinds, indicator."""
+    default_cps = get_widget_setting(page, WIDGET_ID, "default_cps", DEFAULT_CPS)
+    default_button = get_widget_setting(page, WIDGET_ID, "default_button", DEFAULT_BUTTON)
+    show_indicator = get_widget_setting(page, WIDGET_ID, "show_indicator", DEFAULT_SHOW_INDICATOR)
+    randomize_timing = get_widget_setting(
+        page, WIDGET_ID, "randomize_timing", DEFAULT_RANDOMIZE_TIMING
     )
+    start_keybinds: list[dict] = get_widget_setting(page, WIDGET_ID, "start_keybinds", [])
+    stop_keybinds: list[dict] = get_widget_setting(page, WIDGET_ID, "stop_keybinds", [])
 
     status_text = ft.Text("Stopped", weight=ft.FontWeight.W_600)
     count_text = ft.Text("Clicks: 0", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
-    interval_field = ft.TextField(label="Interval (ms)", value=str(default_interval), width=140)
+    cps_field = ft.TextField(
+        label="Clicks per second",
+        value=str(default_cps),
+        width=160,
+        helper=f"{CPS_MIN}-{CPS_MAX}",
+    )
     button_group = ft.RadioGroup(
-        value="left",
+        value=default_button,
         content=ft.Row(
             [
                 ft.Radio(value="left", label="Left click"),
+                ft.Radio(value="middle", label="Middle click"),
                 ft.Radio(value="right", label="Right click"),
             ]
         ),
     )
+    indicator_checkbox = ft.Checkbox(
+        label="Show on-screen indicator while running", value=show_indicator
+    )
+    randomize_checkbox = ft.Checkbox(
+        label=f"Randomize timing slightly (±{RANDOMIZE_PERCENT}%)", value=randomize_timing
+    )
     start_button = ft.FilledButton("Start")
     stop_button = ft.FilledButton("Stop", disabled=True)
+
+    start_chips_row = ft.Row(wrap=True, spacing=6)
+    stop_chips_row = ft.Row(wrap=True, spacing=6)
+    add_start_button = ft.OutlinedButton("Add keybind", icon=ft.Icons.ADD)
+    add_stop_button = ft.OutlinedButton("Add keybind", icon=ft.Icons.ADD)
+
+    def clamp_cps(raw: str) -> int:
+        try:
+            value = int(raw)
+        except ValueError:
+            value = DEFAULT_CPS
+        return max(CPS_MIN, min(CPS_MAX, value))
 
     def set_running(running: bool):
         status_text.value = "Running" if running else "Stopped"
         start_button.disabled = running
         stop_button.disabled = not running
-        interval_field.disabled = running
+        cps_field.disabled = running
+        button_group.disabled = running
         page.update()
 
-    def on_line(data: dict):
+    def on_click_line(data: dict):
         error = data.get("error")
         if error:
             status_text.value = "Error"
@@ -97,31 +251,212 @@ def build_view(page: ft.Page) -> ft.View:
             count_text.value = f"Clicks: {count}"
             page.update()
 
-    def on_exit(code: int):
-        page.session.store.set(_PROCESS_KEY, None)
+    def on_click_exit(code: int):
+        page.session.store.set(_CLICK_PROCESS_KEY, None)
+        set_running(False)
+
+    async def stop_overlay():
+        """Stop the running indicator process, if one is active."""
+        overlay_process: WidgetProcess | None = page.session.store.get(_OVERLAY_PROCESS_KEY)
+        if overlay_process is not None:
+            stop_process(overlay_process)
+        page.session.store.set(_OVERLAY_PROCESS_KEY, None)
+
+    async def start_clicking():
+        """Start the click backend, and the overlay indicator if enabled.
+
+        A no-op if a click process is already running, so this is safe to
+        call from both the Start button and the keybind listener without
+        double-starting.
+        """
+        if page.session.store.get(_CLICK_PROCESS_KEY) is not None:
+            return
+        cps = clamp_cps(cps_field.value)
+        cps_field.value = str(cps)
+        button = button_group.value or DEFAULT_BUTTON
+        command = _click_backend_command(cps, button, randomize_checkbox.value)
+        widget_process = await start_process(
+            page, *command, on_line=on_click_line, on_exit=on_click_exit
+        )
+        page.session.store.set(_CLICK_PROCESS_KEY, widget_process)
+        if indicator_checkbox.value:
+            overlay_process = await start_process(page, *_overlay_command())
+            page.session.store.set(_OVERLAY_PROCESS_KEY, overlay_process)
+        set_running(True)
+
+    async def stop_clicking():
+        """Stop the click backend and its overlay indicator, if running."""
+        widget_process: WidgetProcess | None = page.session.store.get(_CLICK_PROCESS_KEY)
+        if widget_process is not None:
+            stop_process(widget_process)
+        page.session.store.set(_CLICK_PROCESS_KEY, None)
+        await stop_overlay()
         set_running(False)
 
     async def on_start(e: ft.Event[ft.FilledButton]):
-        try:
-            interval_ms = max(1, int(interval_field.value or DEFAULT_INTERVAL_MS))
-        except ValueError:
-            interval_ms = DEFAULT_INTERVAL_MS
-        interval_field.value = str(interval_ms)
+        await start_clicking()
 
-        command = _backend_command(interval_ms, button_group.value or "left")
-        widget_process = await start_process(page, *command, on_line=on_line, on_exit=on_exit)
-        page.session.store.set(_PROCESS_KEY, widget_process)
-        set_running(True)
-
-    def on_stop(e: ft.Event[ft.FilledButton]):
-        widget_process: WidgetProcess | None = page.session.store.get(_PROCESS_KEY)
-        if widget_process is not None:
-            stop_process(widget_process)
-        page.session.store.set(_PROCESS_KEY, None)
-        set_running(False)
+    async def on_stop(e: ft.Event[ft.FilledButton]):
+        await stop_clicking()
 
     start_button.on_click = on_start
     stop_button.on_click = on_stop
+
+    def on_listener_line(data: dict):
+        """Route a keybind listener event to the click start/stop path.
+
+        The listener process only ever reports which action fired; it
+        doesn't drive the click backend itself, so this dispatches to the
+        same start_clicking()/stop_clicking() coroutines the Start/Stop
+        buttons use.
+        """
+        event = data.get("event")
+        if event == "start":
+            page.run_task(start_clicking)
+        elif event == "stop":
+            page.run_task(stop_clicking)
+        elif data.get("error"):
+            show_toast(page, data["error"])
+
+    def make_on_listener_exit(process_box: dict):
+        """A listener may be replaced (keybinds changed) before its old
+        process actually finishes exiting. Only clear the tracked process
+        if it's still the one this particular exit belongs to, so a
+        stale exit callback can't wipe out a newer listener's state.
+        """
+
+        def on_listener_exit(code: int):
+            if page.session.store.get(_LISTENER_PROCESS_KEY) is process_box.get("process"):
+                page.session.store.set(_LISTENER_PROCESS_KEY, None)
+                page.session.store.set(_LISTENER_CONFIG_KEY, None)
+
+        return on_listener_exit
+
+    async def sync_listener():
+        """(Re)start the global keybind listener if the bound keys changed.
+
+        Runs on every view build and after every keybind add/remove, so
+        the listener always matches what's currently configured. It's
+        deliberately not tied to this view's own lifecycle beyond that:
+        once started, it keeps listening even after navigating away, the
+        same way the click process itself is allowed to keep running.
+        """
+        start_hotkeys = [kb["hotkey"] for kb in start_keybinds]
+        stop_hotkeys = [kb["hotkey"] for kb in stop_keybinds]
+        config = json.dumps([start_hotkeys, stop_hotkeys])
+
+        existing_process: WidgetProcess | None = page.session.store.get(_LISTENER_PROCESS_KEY)
+        existing_config = page.session.store.get(_LISTENER_CONFIG_KEY)
+        if existing_config == config:
+            return
+
+        if existing_process is not None:
+            stop_process(existing_process)
+            page.session.store.set(_LISTENER_PROCESS_KEY, None)
+
+        if not start_hotkeys and not stop_hotkeys:
+            page.session.store.set(_LISTENER_CONFIG_KEY, None)
+            return
+
+        process_box: dict = {}
+        command = _keybind_listener_command(start_hotkeys, stop_hotkeys)
+        listener_process = await start_process(
+            page, *command, on_line=on_listener_line, on_exit=make_on_listener_exit(process_box)
+        )
+        process_box["process"] = listener_process
+        page.session.store.set(_LISTENER_PROCESS_KEY, listener_process)
+        page.session.store.set(_LISTENER_CONFIG_KEY, config)
+
+    def render_chips(mounted: bool = True):
+        """Rebuild the start/stop keybind chip rows from current state.
+
+        `mounted=False` skips calling `.update()` on the rows, for use
+        during initial view construction before the page has rendered
+        them yet.
+        """
+
+        def chip_for(keybind: dict, keybinds: list[dict], setting_key: str):
+            def on_delete(e: ft.Event[ft.Chip]):
+                keybinds.remove(keybind)
+                set_widget_setting(page, WIDGET_ID, setting_key, keybinds)
+                render_chips()
+                page.run_task(sync_listener)
+
+            return ft.Chip(label=keybind["label"], on_delete=on_delete)
+
+        start_chips_row.controls = [
+            chip_for(kb, start_keybinds, "start_keybinds") for kb in start_keybinds
+        ]
+        stop_chips_row.controls = [
+            chip_for(kb, stop_keybinds, "stop_keybinds") for kb in stop_keybinds
+        ]
+        if mounted:
+            start_chips_row.update()
+            stop_chips_row.update()
+
+    def start_capture(keybinds: list[dict], setting_key: str, add_button: ft.OutlinedButton):
+        """Arm a one-shot global key listener to capture the next keybind.
+
+        Disables both "Add keybind" buttons and relabels the one that was
+        pressed while waiting, then installs a page-level
+        `on_keyboard_event` handler that consumes exactly one key press,
+        converts it to a hotkey, and stores it if it's valid and not
+        already bound.
+        """
+        add_start_button.disabled = True
+        add_stop_button.disabled = True
+        add_button.text = "Press a key…"
+        page.update()
+
+        def on_key(e: ft.KeyboardEvent):
+            page.on_keyboard_event = None
+            add_start_button.disabled = False
+            add_stop_button.disabled = False
+            add_start_button.text = "Add keybind"
+            add_stop_button.text = "Add keybind"
+
+            captured = _keyboard_event_to_hotkey(e)
+            if captured is None:
+                show_toast(
+                    page,
+                    "That key can't be used as a keybind. Try a letter, number, or "
+                    "function key.",
+                )
+                page.update()
+                return
+
+            label, hotkey = captured
+            if any(kb["hotkey"] == hotkey for kb in start_keybinds + stop_keybinds):
+                show_toast(page, f'"{label}" is already bound. Remove it first to reuse it.')
+                page.update()
+                return
+
+            keybinds.append({"label": label, "hotkey": hotkey})
+            set_widget_setting(page, WIDGET_ID, setting_key, keybinds)
+            render_chips()
+            page.update()
+            page.run_task(sync_listener)
+
+        page.on_keyboard_event = on_key
+
+    add_start_button.on_click = lambda e: start_capture(
+        start_keybinds, "start_keybinds", add_start_button
+    )
+    add_stop_button.on_click = lambda e: start_capture(
+        stop_keybinds, "stop_keybinds", add_stop_button
+    )
+
+    def on_indicator_change(e: ft.Event[ft.Checkbox]):
+        set_widget_setting(page, WIDGET_ID, "show_indicator", e.control.value)
+
+    def on_randomize_change(e: ft.Event[ft.Checkbox]):
+        set_widget_setting(page, WIDGET_ID, "randomize_timing", e.control.value)
+
+    indicator_checkbox.on_change = on_indicator_change
+    randomize_checkbox.on_change = on_randomize_change
+
+    render_chips(mounted=False)
+    page.run_task(sync_listener)
 
     content = ft.Column(
         [
@@ -133,12 +468,32 @@ def build_view(page: ft.Page) -> ft.View:
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
-            ft.Row([interval_field, button_group]),
+            ft.Text(
+                "Using this in Rogue Lineage risks the account it's running "
+                "on. Roblox and Rogue Lineage both take automation seriously, "
+                "especially in combat.",
+                size=12,
+                color=ft.Colors.ERROR,
+            ),
+            ft.Row([cps_field, button_group]),
+            ft.Row([indicator_checkbox, randomize_checkbox]),
             ft.Row([start_button, stop_button]),
             status_text,
             count_text,
+            ft.Divider(),
+            ft.Text("Turn on with", weight=ft.FontWeight.W_600),
+            ft.Text(
+                "Any of these keys works globally, even while another window "
+                "has focus.",
+                size=12,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            ),
+            ft.Row([start_chips_row, add_start_button], wrap=True, spacing=8),
+            ft.Text("Turn off with", weight=ft.FontWeight.W_600),
+            ft.Row([stop_chips_row, add_stop_button], wrap=True, spacing=8),
         ],
         spacing=12,
+        scroll=ft.ScrollMode.AUTO,
     )
 
     return ft.View(
@@ -150,34 +505,47 @@ def build_view(page: ft.Page) -> ft.View:
 
 
 def build_settings(page: ft.Page) -> ft.Control:
-    """The Autoclicker's Settings section: just its default interval."""
+    """The Autoclicker's Settings section: defaults for CPS and button."""
 
-    def on_blur(e: ft.Event[ft.TextField]):
+    def on_cps_blur(e: ft.Event[ft.TextField]):
         try:
-            value = max(1, int(e.control.value or DEFAULT_INTERVAL_MS))
+            value = max(CPS_MIN, min(CPS_MAX, int(e.control.value or DEFAULT_CPS)))
         except ValueError:
-            value = DEFAULT_INTERVAL_MS
+            value = DEFAULT_CPS
         e.control.value = str(value)
         e.control.update()
-        set_widget_setting(page, WIDGET_ID, "default_interval_ms", value)
+        set_widget_setting(page, WIDGET_ID, "default_cps", value)
 
-    default_interval = get_widget_setting(
-        page, WIDGET_ID, "default_interval_ms", DEFAULT_INTERVAL_MS
-    )
+    def on_button_change(e: ft.Event[ft.RadioGroup]):
+        set_widget_setting(page, WIDGET_ID, "default_button", e.control.value)
+
+    default_cps = get_widget_setting(page, WIDGET_ID, "default_cps", DEFAULT_CPS)
+    default_button = get_widget_setting(page, WIDGET_ID, "default_button", DEFAULT_BUTTON)
 
     return ft.Column(
         [
             ft.Text(
-                "The interval field on the Autoclicker screen starts at this "
-                "value each time it opens.",
+                "The Autoclicker screen starts at these values each time it "
+                "opens.",
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
             ft.TextField(
-                label="Default interval (ms)",
-                value=str(default_interval),
+                label=f"Default CPS ({CPS_MIN}-{CPS_MAX})",
+                value=str(default_cps),
                 width=200,
-                on_blur=on_blur,
+                on_blur=on_cps_blur,
+            ),
+            ft.RadioGroup(
+                value=default_button,
+                on_change=on_button_change,
+                content=ft.Row(
+                    [
+                        ft.Radio(value="left", label="Left click"),
+                        ft.Radio(value="middle", label="Middle click"),
+                        ft.Radio(value="right", label="Right click"),
+                    ]
+                ),
             ),
         ],
         spacing=8,
