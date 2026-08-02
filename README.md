@@ -46,3 +46,13 @@ pyright
 ## Documentation
 
 The Sphinx API documentation lives on the `docs` branch, not `main`.
+
+## Widget development
+
+An installed widget (under `WIDGETS_DIR`, see Settings -> Widgets for the
+path on your machine) is a separate copy from its source in this repo's
+`widgets/` folder. Editing a widget's source here does not update an
+already-installed copy. For now, changes have to be copied over manually
+(or reinstalled through the Catalogue) to be picked up. Automatically
+syncing an installed widget with its repo source during development is
+not implemented yet.
