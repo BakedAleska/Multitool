@@ -1,6 +1,10 @@
+"""The shared page shell: nav rail plus content area, used by every view."""
+
 import flet as ft
 
-from app.state import get_nav_position
+from app.state import get_custom_theme, get_nav_position, is_custom_theme_active
+from app.theme import BACKGROUND_FIT_MAP
+from app.ui.style import radius_card
 from app.widgets.loader import get_enabled_widgets
 
 CORE_ROUTES = ["/", "/accounts", "/widgets", "/settings"]
@@ -30,10 +34,22 @@ CORE_DESTINATIONS = [
 
 
 def widget_route(widget_id: str) -> str:
+    """The route a widget's own view is built at."""
     return f"/widgets/{widget_id}"
 
 
 def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
+    """Wrap page content in the shared nav rail and content area.
+
+    Every view calls this to get the same nav rail, so a new view only
+    needs to build its own content.
+
+    Enabled widgets are listed below the core destinations, separated by
+    a divider, using NavigationRail's trailing slot. By default that
+    slot flows directly after the destination list instead of pinning to
+    the bottom of the window, which is what gives the "core items, then
+    a line, then installed widgets" layout.
+    """
     current_route = page.route
     core_selected = CORE_ROUTES.index(current_route) if current_route in CORE_ROUTES else None
 
@@ -47,11 +63,6 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
     widgets_section = None
     widgets = get_enabled_widgets(page)
     if widgets:
-        # Divider + one row per widget, rendered via NavigationRail's
-        # `trailing` slot — which (pin_trailing_to_bottom defaults to
-        # False) flows directly after the destination list rather than
-        # being pinned to the window's bottom edge. This is what actually
-        # produces "default items, then a line, then installed widgets."
         rows: list[ft.Control] = [ft.Divider(height=1)]
         for widget in widgets:
             selected = current_route == widget_route(widget.id)
@@ -67,7 +78,7 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
                         spacing=4,
                     ),
                     padding=ft.Padding.symmetric(vertical=8),
-                    border_radius=8,
+                    border_radius=radius_card(page),
                     bgcolor=ft.Colors.SECONDARY_CONTAINER if selected else None,
                     on_click=lambda e, wid=widget.id: page.run_task(go_to_widget, wid),
                 )
@@ -90,4 +101,30 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
     else:
         row_controls = [nav_rail, divider, content_area]
 
-    return ft.Row(row_controls, expand=True, spacing=0)
+    row = ft.Row(row_controls, expand=True, spacing=0)
+
+    background_image = _background_image(page)
+    if background_image is None:
+        return row
+
+    return ft.Stack([background_image, row], expand=True)
+
+
+def _background_image(page: ft.Page) -> ft.Control | None:
+    """The active custom theme's background image, or None if it has none."""
+    if not is_custom_theme_active(page):
+        return None
+
+    theme = get_custom_theme(page)
+    src = theme.get("background_image") if theme else None
+    if not src:
+        return None
+
+    return ft.Container(
+        image=ft.DecorationImage(
+            src=src,
+            fit=BACKGROUND_FIT_MAP.get(theme.get("background_fit"), ft.BoxFit.COVER),
+            opacity=theme.get("background_opacity", 1.0),
+        ),
+        expand=True,
+    )
