@@ -16,6 +16,7 @@ from multitool.widgets.catalog import (
 )
 from multitool.widgets.installer import (
     WidgetInstallError,
+    has_update,
     install_widget,
     is_installing,
     mark_installing,
@@ -127,6 +128,22 @@ def WidgetsView(page: ft.Page) -> ft.View:
         remove_widget_settings(page, widget_id)
         refresh()
 
+    async def on_update(entry: CatalogEntry):
+        """Reinstall a Catalogue entry over its currently installed copy.
+
+        Unlike on_install, this leaves the widget's enabled state alone -
+        updating a disabled widget shouldn't silently re-enable it.
+        """
+        mark_installing(page, entry.id)
+        refresh()
+        try:
+            await asyncio.to_thread(install_widget, entry)
+        except WidgetInstallError as e:
+            show_toast(page, str(e))
+        finally:
+            unmark_installing(page, entry.id)
+            refresh()
+
     async def background_refresh_catalogue():
         """Fetch the Catalogue, then refresh this view.
 
@@ -166,10 +183,39 @@ def WidgetsView(page: ft.Page) -> ft.View:
         fill the space up to the footer, instead of a fixed line count
         with an ellipsis - a long description scrolls in place rather
         than getting cut short.
+
+        A widget whose Catalogue entry has a different sha256 than the
+        one recorded at install time gets an update button in place of
+        its settings/uninstall row, swapped for a progress ring while
+        the update is running - see has_update() and on_update().
         """
         enabled = widget.id not in disabled_ids
+        registry_entry = registry_by_id.get(widget.id)
+        updatable = registry_entry is not None and has_update(registry_entry)
+        updating = is_installing(page, widget.id)
 
         trailing_actions: list[ft.Control] = []
+        if updating:
+            trailing_actions.append(
+                ft.Container(
+                    content=ft.ProgressRing(width=14, height=14, stroke_width=2),
+                    padding=8,
+                )
+            )
+        elif updatable:
+            trailing_actions.append(
+                ft.IconButton(
+                    icon=ft.Icons.SYSTEM_UPDATE_ALT,
+                    icon_size=16,
+                    icon_color=ft.Colors.PRIMARY,
+                    tooltip=(
+                        f"Update {widget.name} to version {registry_entry.version}"
+                        if registry_entry.version
+                        else f"Update {widget.name}"
+                    ),
+                    on_click=lambda e, ent=registry_entry: page.run_task(on_update, ent),
+                )
+            )
         if widget.build_settings is not None:
             trailing_actions.append(
                 ft.IconButton(
@@ -367,7 +413,9 @@ def WidgetsView(page: ft.Page) -> ft.View:
 
     catalogue_fetched = page.session.store.get(_CATALOGUE_FETCHED_KEY)
     catalogue_error = page.session.store.get(_CATALOGUE_ERROR_KEY)
-    catalogue_entries = [e for e in get_cached_registry(page) if e.id not in local_ids]
+    all_entries = get_cached_registry(page)
+    registry_by_id = {e.id: e for e in all_entries}
+    catalogue_entries = [e for e in all_entries if e.id not in local_ids]
 
     if not catalogue_fetched:
         catalogue_content: ft.Control = ft.Text(

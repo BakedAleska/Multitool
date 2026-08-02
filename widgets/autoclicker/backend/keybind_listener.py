@@ -6,6 +6,13 @@ JSON line to stdout each time one fires: {"event": "start"} or
 {"event": "stop"}. widget.py starts and stops the actual click backend
 in response, the same way it does for its manual Start/Stop buttons.
 
+A hotkey listed in both the start and stop lists gets a third event,
+{"event": "toggle"}, instead of being bound to either directly. This
+process has no idea whether clicking is currently running - only
+widget.py does - so it can't decide on its own whether a shared key
+should mean start or stop; it just reports that the key fired and lets
+widget.py apply it against the real state.
+
 This is a Python script rather than a platform-native one, unlike the
 click backends, because global hotkey capture needs a real keyboard hook
 and pynput already wraps the platform APIs for that on both Windows and
@@ -43,11 +50,17 @@ def main() -> None:
         print(json.dumps({"error": "keybind_listener.py needs start and stop hotkey lists."}))
         sys.exit(1)
 
-    start_hotkeys = json.loads(sys.argv[1])
-    stop_hotkeys = json.loads(sys.argv[2])
+    start_hotkeys = set(json.loads(sys.argv[1]))
+    stop_hotkeys = set(json.loads(sys.argv[2]))
+    toggle_hotkeys = start_hotkeys & stop_hotkeys
 
-    bindings = {hotkey: (lambda: _print_event("start")) for hotkey in start_hotkeys}
-    bindings.update({hotkey: (lambda: _print_event("stop")) for hotkey in stop_hotkeys})
+    bindings = {
+        hotkey: (lambda: _print_event("start")) for hotkey in start_hotkeys - toggle_hotkeys
+    }
+    bindings.update(
+        {hotkey: (lambda: _print_event("stop")) for hotkey in stop_hotkeys - toggle_hotkeys}
+    )
+    bindings.update({hotkey: (lambda: _print_event("toggle")) for hotkey in toggle_hotkeys})
 
     if not bindings:
         print(json.dumps({"error": "No keybinds were configured."}))

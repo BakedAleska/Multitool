@@ -18,7 +18,11 @@ way:
 
 - backend/keybind_listener.py, using pynput to listen system-wide for
   configured start/stop hotkeys, so clicking can be toggled without
-  switching focus back to Multitool.
+  switching focus back to Multitool. The same key can be bound as both
+  the start and the stop keybind for one Autoclicker instance: pressing
+  it then acts like a NOT gate on the running state, on if it was off
+  and off if it was on, rather than needing separate keys for each
+  direction.
 - backend/overlay.py, a small always-on-top tkinter window shown while
   clicking is active, so it's visible even when Multitool itself is in
   the background.
@@ -95,7 +99,19 @@ def _keyboard_event_to_hotkey(e: ft.KeyboardEvent) -> tuple[str, str] | None:
     """Convert a Flet key press into a (label, pynput hotkey string) pair.
 
     Returns None if the key alone isn't a usable hotkey, e.g. a modifier
-    pressed on its own with nothing else.
+    pressed on its own with nothing else, or "+" (see below).
+
+    Letters and digits are lowercased into the token and their case
+    restored separately via an explicit "<shift>" token, so the token
+    itself stays canonical regardless of whether the key was typed with
+    Shift held. Punctuation and symbol keys such as "/" or "~" have no
+    such canonical unshifted form to fall back on, so they're passed
+    through as-is instead: pynput's hotkey parser treats any single
+    character literally (matched against the character the OS actually
+    produced), which is exactly what `e.key` already reports, whether or
+    not Shift changed it. "+" is the one character that can't be used,
+    since it's the separator this module's own hotkey strings are joined
+    with, not a limitation of pynput's format.
     """
     key = e.key
     if key in ("Shift", "Control", "Alt", "Meta"):
@@ -104,6 +120,11 @@ def _keyboard_event_to_hotkey(e: ft.KeyboardEvent) -> tuple[str, str] | None:
     if len(key) == 1 and key.isalnum():
         main_token = key.lower()
         main_label = key.upper()
+    elif len(key) == 1 and key.isprintable() and not key.isspace():
+        if key == "+":
+            return None
+        main_token = key
+        main_label = key
     elif _FUNCTION_KEY_RE.match(key):
         main_token = key.lower()
         main_label = key
@@ -223,6 +244,9 @@ def build_view(page: ft.Page) -> ft.View:
     stop_chips_row = ft.Row(wrap=True, spacing=6)
     add_start_button = ft.OutlinedButton("Add keybind", icon=ft.Icons.ADD)
     add_stop_button = ft.OutlinedButton("Add keybind", icon=ft.Icons.ADD)
+    capture_hint = ft.Text(
+        "", size=12, weight=ft.FontWeight.W_600, color=ft.Colors.PRIMARY, visible=False
+    )
 
     def clamp_cps(raw: str) -> int:
         try:
@@ -309,12 +333,23 @@ def build_view(page: ft.Page) -> ft.View:
         doesn't drive the click backend itself, so this dispatches to the
         same start_clicking()/stop_clicking() coroutines the Start/Stop
         buttons use.
+
+        A "toggle" event means the pressed key is bound as both a start
+        and a stop keybind for this action - the listener can't tell on
+        its own which one that should mean, since it has no idea whether
+        clicking is currently running, so it defers that decision here,
+        where the real state (_CLICK_PROCESS_KEY) is available.
         """
         event = data.get("event")
         if event == "start":
             page.run_task(start_clicking)
         elif event == "stop":
             page.run_task(stop_clicking)
+        elif event == "toggle":
+            if page.session.store.get(_CLICK_PROCESS_KEY) is not None:
+                page.run_task(stop_clicking)
+            else:
+                page.run_task(start_clicking)
         elif data.get("error"):
             show_toast(page, data["error"])
 
@@ -370,10 +405,17 @@ def build_view(page: ft.Page) -> ft.View:
     def render_chips(mounted: bool = True):
         """Rebuild the start/stop keybind chip rows from current state.
 
+        A keybind bound in both lists gets "(toggle)" appended to its
+        chip label in each - see the module docstring's note on shared
+        start/stop keybinds for what that means at runtime.
+
         `mounted=False` skips calling `.update()` on the rows, for use
         during initial view construction before the page has rendered
         them yet.
         """
+        shared_hotkeys = {kb["hotkey"] for kb in start_keybinds} & {
+            kb["hotkey"] for kb in stop_keybinds
+        }
 
         def chip_for(keybind: dict, keybinds: list[dict], setting_key: str):
             def on_delete(e: ft.Event[ft.Chip]):
@@ -382,7 +424,10 @@ def build_view(page: ft.Page) -> ft.View:
                 render_chips()
                 page.run_task(sync_listener)
 
-            return ft.Chip(label=keybind["label"], on_delete=on_delete)
+            label = keybind["label"]
+            if keybind["hotkey"] in shared_hotkeys:
+                label = f"{label} (toggle)"
+            return ft.Chip(label=label, on_delete=on_delete)
 
         start_chips_row.controls = [
             chip_for(kb, start_keybinds, "start_keybinds") for kb in start_keybinds
@@ -394,50 +439,91 @@ def build_view(page: ft.Page) -> ft.View:
             start_chips_row.update()
             stop_chips_row.update()
 
-    def start_capture(keybinds: list[dict], setting_key: str, add_button: ft.OutlinedButton):
-        """Arm a one-shot global key listener to capture the next keybind.
+    capture: dict = {"keybinds": None, "setting_key": None}
+    """Which list a captured key should go into, or both None when no
+    capture is armed. A plain dict instead of separate variables so
+    on_page_keyboard_event (a closure defined once, below) can read
+    whatever start_capture() last wrote to it.
+    """
 
-        Disables both "Add keybind" buttons and relabels the one that was
-        pressed while waiting, then installs a page-level
-        `on_keyboard_event` handler that consumes exactly one key press,
-        converts it to a hotkey, and stores it if it's valid and not
-        already bound.
+    def cancel_capture():
+        """Disarm capture and restore both "Add keybind" buttons."""
+        capture["keybinds"] = None
+        capture["setting_key"] = None
+        add_start_button.disabled = False
+        add_stop_button.disabled = False
+        add_start_button.text = "Add keybind"
+        add_stop_button.text = "Add keybind"
+        capture_hint.value = ""
+        capture_hint.visible = False
+
+    def on_page_keyboard_event(e: ft.KeyboardEvent):
+        """The page's one and only keyboard handler, registered once below.
+
+        start_capture() doesn't assign a fresh `page.on_keyboard_event`
+        of its own for each capture - Flet doesn't reliably swap out a
+        dynamically-reassigned page-level handler, so a second capture
+        could end up silently ignored, or both the old and new handler
+        firing together. Registering a single handler up front and
+        gating its behavior on the `capture` dict sidesteps that
+        entirely: nothing about the handler itself ever changes, only
+        the state it reads.
+
+        A no-op whenever no capture is armed (`capture["keybinds"] is
+        None`), which is the normal case.
         """
+        if capture["keybinds"] is None:
+            return
+
+        if e.key == "Escape":
+            cancel_capture()
+            page.update()
+            return
+
+        keybinds = capture["keybinds"]
+        setting_key = capture["setting_key"]
+        cancel_capture()
+
+        captured = _keyboard_event_to_hotkey(e)
+        if captured is None:
+            show_toast(page, "That key can't be used as a keybind. Try a different one.")
+            page.update()
+            return
+
+        label, hotkey = captured
+        if any(kb["hotkey"] == hotkey for kb in keybinds):
+            show_toast(page, f'"{label}" is already used for this action.')
+            page.update()
+            return
+
+        keybinds.append({"label": label, "hotkey": hotkey})
+        set_widget_setting(page, WIDGET_ID, setting_key, keybinds)
+        render_chips()
+        page.update()
+        page.run_task(sync_listener)
+
+    page.on_keyboard_event = on_page_keyboard_event
+
+    def start_capture(keybinds: list[dict], setting_key: str, add_button: ft.OutlinedButton):
+        """Arm on_page_keyboard_event to capture the next key press.
+
+        Disables both "Add keybind" buttons, relabels the one that was
+        pressed, and shows an explicit "Press a key…" hint next to them -
+        a button label change alone is easy to miss, especially since
+        both buttons briefly go from enabled to disabled at the same
+        moment the pressed one's own label changes.
+
+        The same start and stop keybind can be captured here without
+        conflict - see the module docstring.
+        """
+        capture["keybinds"] = keybinds
+        capture["setting_key"] = setting_key
         add_start_button.disabled = True
         add_stop_button.disabled = True
         add_button.text = "Press a key…"
+        capture_hint.value = "Press any key… (Esc to cancel)"
+        capture_hint.visible = True
         page.update()
-
-        def on_key(e: ft.KeyboardEvent):
-            page.on_keyboard_event = None
-            add_start_button.disabled = False
-            add_stop_button.disabled = False
-            add_start_button.text = "Add keybind"
-            add_stop_button.text = "Add keybind"
-
-            captured = _keyboard_event_to_hotkey(e)
-            if captured is None:
-                show_toast(
-                    page,
-                    "That key can't be used as a keybind. Try a letter, number, or "
-                    "function key.",
-                )
-                page.update()
-                return
-
-            label, hotkey = captured
-            if any(kb["hotkey"] == hotkey for kb in start_keybinds + stop_keybinds):
-                show_toast(page, f'"{label}" is already bound. Remove it first to reuse it.')
-                page.update()
-                return
-
-            keybinds.append({"label": label, "hotkey": hotkey})
-            set_widget_setting(page, WIDGET_ID, setting_key, keybinds)
-            render_chips()
-            page.update()
-            page.run_task(sync_listener)
-
-        page.on_keyboard_event = on_key
 
     add_start_button.on_click = lambda e: start_capture(
         start_keybinds, "start_keybinds", add_start_button
@@ -481,6 +567,7 @@ def build_view(page: ft.Page) -> ft.View:
             status_text,
             count_text,
             ft.Divider(),
+            capture_hint,
             ft.Text("Turn on with", weight=ft.FontWeight.W_600),
             ft.Text(
                 "Any of these keys works globally, even while another window "

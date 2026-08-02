@@ -2,9 +2,11 @@
 
 import hashlib
 import io
+import json
 import shutil
 import uuid
 import zipfile
+from typing import Optional
 
 import flet as ft
 import httpx
@@ -16,6 +18,14 @@ from multitool.widgets.catalog import CatalogEntry
 logger = get_logger(__name__)
 
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
+
+INSTALL_MANIFEST_NAME = ".installed.json"
+"""Filename of the small JSON manifest install_widget() drops inside each
+widget it installs, recording the version and sha256 it came from. Dot-
+prefixed like the staging directories, for the same reason: nothing else
+in the codebase treats a leading-dot name as widget content. has_update()
+reads it back to tell whether a newer Catalogue entry has shipped since.
+"""
 
 _INSTALLING_KEY = "_widget_installer_installing"
 
@@ -118,6 +128,9 @@ def install_widget(entry: CatalogEntry) -> None:
                 "The downloaded widget has no widget.py. Is this the correct folder for it?"
             )
 
+        manifest = {"id": entry.id, "version": entry.version, "sha256": entry.sha256}
+        (staging_dir / INSTALL_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2))
+
         final_dir = WIDGETS_DIR / entry.id
         if final_dir.exists():
             shutil.rmtree(final_dir)
@@ -138,6 +151,38 @@ def uninstall_widget(widget_id: str) -> None:
     if target.exists():
         shutil.rmtree(target)
         logger.info("Uninstalled widget '%s'", widget_id)
+
+
+def get_installed_manifest(widget_id: str) -> Optional[dict]:
+    """The install manifest for a widget installed via the Catalogue.
+
+    Returns None if the widget isn't installed, or was added manually
+    (a folder copied straight into WIDGETS_DIR) instead of through
+    install_widget(), so there's no manifest to read.
+    """
+    manifest_path = WIDGETS_DIR / widget_id / INSTALL_MANIFEST_NAME
+    if not manifest_path.exists():
+        return None
+    try:
+        return json.loads(manifest_path.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("Couldn't read install manifest for '%s': %s", widget_id, e)
+        return None
+
+
+def has_update(entry: CatalogEntry) -> bool:
+    """Whether a Catalogue entry's sha256 differs from what's installed.
+
+    Compares against the installed sha256 rather than the version
+    string, since a registry entry's source can change without its
+    version field being bumped to match. Always False for a widget
+    with no install manifest (installed manually, not via the
+    Catalogue), since there's nothing to compare against.
+    """
+    manifest = get_installed_manifest(entry.id)
+    if manifest is None:
+        return False
+    return manifest.get("sha256") != entry.sha256
 
 
 def is_installing(page: ft.Page, widget_id: str) -> bool:
