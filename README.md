@@ -45,14 +45,4 @@ pyright
 
 ## Documentation
 
-API docs are generated from docstrings with Sphinx. Install the dev
-dependencies, then regenerate the module stubs and build the HTML:
-
-```
-pip install -r requirements-dev.txt
-sphinx-apidoc --implicit-namespaces -f -e -o docs/source/api multitool
-sphinx-build -b html docs/source docs/build
-```
-
-Open `docs/build/index.html` to view it. Re-run `sphinx-apidoc` whenever
-modules are added, removed, or renamed.
+The Sphinx API documentation lives on the `docs` branch, not `main`.
