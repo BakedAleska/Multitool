@@ -1,7 +1,7 @@
 """Always-on-top borderless window that displays a single image.
 
 No picture-viewer chrome, no taskbar entry, nothing but the image itself
-pinned to a screen corner (or the center), the same borderless/topmost
+pinned inside a user-chosen screen area, the same borderless/topmost
 pattern widgets/autoclicker/backend/overlay.py already uses for its
 "running" indicator.
 
@@ -22,7 +22,12 @@ import json
 import sys
 import tkinter as tk
 
-POSITIONS = ("top-left", "top-right", "bottom-left", "bottom-right", "center")
+TRANSPARENT_KEY = "#010101"
+"""Near-black fill color for the space in the area not covered by the
+image. On Windows this is set as the window's transparent color, so
+that space is see-through. There's no tkinter equivalent on macOS, so
+it shows as a solid near-black box there instead.
+"""
 
 
 def _print(data: dict) -> None:
@@ -46,19 +51,6 @@ def _make_click_through_windows(root: tk.Tk) -> None:
         pass
 
 
-def _anchor(position: str, margin: int, screen_w: int, screen_h: int, w: int, h: int):
-    """Top-left (x, y) to place a w x h image per the chosen anchor."""
-    if position == "top-left":
-        return margin, margin
-    if position == "top-right":
-        return screen_w - w - margin, margin
-    if position == "bottom-left":
-        return margin, screen_h - h - margin
-    if position == "bottom-right":
-        return screen_w - w - margin, screen_h - h - margin
-    return (screen_w - w) // 2, (screen_h - h) // 2
-
-
 def main() -> None:
     """Parse arguments, load and place the image, then block on the window.
 
@@ -66,11 +58,18 @@ def main() -> None:
     can't be decoded as PNG or GIF. On success, prints `{"ready": true}`
     once the window is showing and then blocks in `mainloop()` until the
     parent process kills it.
+
+    The image is anchored to the area's top-left corner at its native
+    size. An area smaller than the image clips it, since a tkinter
+    Canvas doesn't draw past its own bounds; an area larger than the
+    image leaves the remaining space as TRANSPARENT_KEY.
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True)
-    parser.add_argument("--position", choices=POSITIONS, default="top-right")
-    parser.add_argument("--margin", type=int, default=24)
+    parser.add_argument("--x", type=int, default=0)
+    parser.add_argument("--y", type=int, default=0)
+    parser.add_argument("--width", type=int, default=0)
+    parser.add_argument("--height", type=int, default=0)
     parser.add_argument("--opacity", type=float, default=0.85)
     parser.add_argument("--click-through", action="store_true")
     args = parser.parse_args()
@@ -84,6 +83,9 @@ def main() -> None:
         _print({"error": f"Couldn't load this image as PNG or GIF. {e}"})
         sys.exit(1)
 
+    width = args.width if args.width > 0 else image.width()
+    height = args.height if args.height > 0 else image.height()
+
     root.overrideredirect(True)
     root.attributes("-topmost", True)
     try:
@@ -91,14 +93,20 @@ def main() -> None:
     except tk.TclError:
         pass
 
-    width, height = image.width(), image.height()
-    screen_w, screen_h = root.winfo_screenwidth(), root.winfo_screenheight()
-    x, y = _anchor(args.position, args.margin, screen_w, screen_h, width, height)
-    root.geometry(f"{width}x{height}+{x}+{y}")
+    root.geometry(f"{width}x{height}+{args.x}+{args.y}")
 
-    label = tk.Label(root, image=image, borderwidth=0, highlightthickness=0)
-    label.pack()
+    canvas = tk.Canvas(
+        root, width=width, height=height, bg=TRANSPARENT_KEY, highlightthickness=0
+    )
+    canvas.pack(fill="both", expand=True)
+    canvas.create_image(0, 0, image=image, anchor="nw")
     root.deiconify()
+
+    if sys.platform == "win32":
+        try:
+            root.attributes("-transparentcolor", TRANSPARENT_KEY)
+        except tk.TclError:
+            pass
 
     if args.click_through and sys.platform == "win32":
         root.after(50, lambda: _make_click_through_windows(root))

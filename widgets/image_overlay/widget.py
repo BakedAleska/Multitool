@@ -12,8 +12,11 @@ decoder rather than adding Pillow as a dependency, and tkinter can't
 decode JPEG on its own.
 """
 
+import asyncio
+import json
 import sys
 from pathlib import Path
+from typing import Optional
 
 import flet as ft
 
@@ -23,25 +26,18 @@ from multitool.widgets.api import Widget
 from multitool.widgets.process import WidgetProcess, start_process, stop_process
 
 BACKEND_SCRIPT = Path(__file__).parent / "backend" / "overlay_image.py"
+AREA_PICKER_SCRIPT = Path(__file__).parent / "backend" / "area_picker.py"
 
 WIDGET_ID = "image_overlay"
 _PROCESS_KEY = f"_{WIDGET_ID}_process"
 
-POSITIONS = [
-    ("top-left", "Top left"),
-    ("top-right", "Top right"),
-    ("bottom-left", "Bottom left"),
-    ("bottom-right", "Bottom right"),
-    ("center", "Center"),
-]
-DEFAULT_POSITION = "top-right"
-DEFAULT_MARGIN = 24
+DEFAULT_AREA = {"x": 100, "y": 100, "width": 300, "height": 300}
 DEFAULT_OPACITY = 0.85
 DEFAULT_CLICK_THROUGH = True
 
 
 def _backend_command(
-    image_path: str, position: str, margin: int, opacity: float, click_through: bool
+    image_path: str, area: dict, opacity: float, click_through: bool
 ) -> list[str]:
     """The command that starts `backend/overlay_image.py` with these options."""
     command = [
@@ -49,10 +45,14 @@ def _backend_command(
         str(BACKEND_SCRIPT),
         "--image",
         image_path,
-        "--position",
-        position,
-        "--margin",
-        str(margin),
+        "--x",
+        str(area["x"]),
+        "--y",
+        str(area["y"]),
+        "--width",
+        str(area["width"]),
+        "--height",
+        str(area["height"]),
         "--opacity",
         str(opacity),
     ]
@@ -61,10 +61,55 @@ def _backend_command(
     return command
 
 
+async def _pick_area() -> Optional[dict]:
+    """Run the fullscreen area picker and return the rectangle it chose.
+
+    Spawns `backend/area_picker.py` as a one-shot subprocess and reads
+    the single JSON line it prints, the same pattern
+    multitool/roblox/login.py uses for its own subprocess. Returns None
+    if the user cancelled, closed the picker some other way, or it
+    printed nothing at all.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        str(AREA_PICKER_SCRIPT),
+        stdout=asyncio.subprocess.PIPE,
+    )
+    line = await proc.stdout.readline()
+    await proc.wait()
+    if not line:
+        return None
+    try:
+        data = json.loads(line)
+    except ValueError:
+        return None
+    if "x" not in data:
+        return None
+    return {"x": data["x"], "y": data["y"], "width": data["width"], "height": data["height"]}
+
+
+def _parse_area(x_field: ft.TextField, y_field: ft.TextField, w_field: ft.TextField,
+                 h_field: ft.TextField, fallback: dict) -> dict:
+    """Read the four area fields, falling back to `fallback` per-field on
+    a bad or empty value, and clamping width/height to at least 1.
+    """
+
+    def _int(value: Optional[str], default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    x = _int(x_field.value, fallback["x"])
+    y = _int(y_field.value, fallback["y"])
+    width = max(1, _int(w_field.value, fallback["width"]))
+    height = max(1, _int(h_field.value, fallback["height"]))
+    return {"x": x, "y": y, "width": width, "height": height}
+
+
 def build_view(page: ft.Page) -> ft.View:
     """The Image Overlay's own screen: pick an image, place it, pin it."""
-    default_position = get_widget_setting(page, WIDGET_ID, "default_position", DEFAULT_POSITION)
-    default_margin = get_widget_setting(page, WIDGET_ID, "default_margin", DEFAULT_MARGIN)
+    area = get_widget_setting(page, WIDGET_ID, "area", DEFAULT_AREA)
     default_opacity = get_widget_setting(page, WIDGET_ID, "default_opacity", DEFAULT_OPACITY)
     default_click_through = get_widget_setting(
         page, WIDGET_ID, "default_click_through", DEFAULT_CLICK_THROUGH
@@ -73,13 +118,11 @@ def build_view(page: ft.Page) -> ft.View:
     image_path_text = ft.Text("No image selected.", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
     status_text = ft.Text("Stopped", weight=ft.FontWeight.W_600)
     pick_button = ft.OutlinedButton("Choose image (PNG or GIF)")
-    position_dropdown = ft.Dropdown(
-        label="Position",
-        value=default_position,
-        options=[ft.dropdown.Option(key=key, text=label) for key, label in POSITIONS],
-        width=180,
-    )
-    margin_field = ft.TextField(label="Margin (px)", value=str(default_margin), width=120)
+    x_field = ft.TextField(label="X", value=str(area["x"]), width=90)
+    y_field = ft.TextField(label="Y", value=str(area["y"]), width=90)
+    width_field = ft.TextField(label="Width", value=str(area["width"]), width=90)
+    height_field = ft.TextField(label="Height", value=str(area["height"]), width=90)
+    pick_area_button = ft.OutlinedButton("Pick area on screen...")
     opacity_slider = ft.Slider(
         min=0.1, max=1.0, divisions=18, value=default_opacity, label="{value}"
     )
@@ -97,11 +140,27 @@ def build_view(page: ft.Page) -> ft.View:
         start_button.disabled = running or not image_path_text.data
         stop_button.disabled = not running
         pick_button.disabled = running
-        position_dropdown.disabled = running
-        margin_field.disabled = running
+        x_field.disabled = running
+        y_field.disabled = running
+        width_field.disabled = running
+        height_field.disabled = running
+        pick_area_button.disabled = running
         opacity_slider.disabled = running
         click_through_checkbox.disabled = running
         page.update()
+
+    def save_area() -> dict:
+        """Read the area fields, persist them, and write the parsed
+        values back into the fields so an out-of-range entry is
+        visibly corrected.
+        """
+        current = _parse_area(x_field, y_field, width_field, height_field, area)
+        x_field.value = str(current["x"])
+        y_field.value = str(current["y"])
+        width_field.value = str(current["width"])
+        height_field.value = str(current["height"])
+        set_widget_setting(page, WIDGET_ID, "area", current)
+        return current
 
     async def on_pick(e: ft.Event[ft.OutlinedButton]):
         """Open the file picker and store the chosen image's path.
@@ -119,6 +178,26 @@ def build_view(page: ft.Page) -> ft.View:
         image_path_text.value = picked.name
         image_path_text.data = picked.path
         start_button.disabled = False
+        page.update()
+
+    async def on_pick_area(e: ft.Event[ft.OutlinedButton]):
+        """Run the fullscreen area picker and apply the rectangle it
+        returns to the area fields, saving it immediately.
+        """
+        pick_area_button.disabled = True
+        page.update()
+        picked = await _pick_area()
+        pick_area_button.disabled = False
+        if picked is not None:
+            x_field.value = str(picked["x"])
+            y_field.value = str(picked["y"])
+            width_field.value = str(picked["width"])
+            height_field.value = str(picked["height"])
+            set_widget_setting(page, WIDGET_ID, "area", picked)
+        page.update()
+
+    def on_area_field_blur(e: ft.Event[ft.TextField]):
+        save_area()
         page.update()
 
     def on_line(data: dict):
@@ -142,16 +221,11 @@ def build_view(page: ft.Page) -> ft.View:
         image_path = image_path_text.data
         if not image_path:
             return
-        try:
-            margin = max(0, int(margin_field.value or DEFAULT_MARGIN))
-        except ValueError:
-            margin = DEFAULT_MARGIN
-        margin_field.value = str(margin)
+        current_area = save_area()
 
         command = _backend_command(
             image_path,
-            position_dropdown.value or DEFAULT_POSITION,
-            margin,
+            current_area,
             opacity_slider.value,
             click_through_checkbox.value or False,
         )
@@ -167,6 +241,9 @@ def build_view(page: ft.Page) -> ft.View:
         set_running(False)
 
     pick_button.on_click = on_pick
+    pick_area_button.on_click = on_pick_area
+    for field in (x_field, y_field, width_field, height_field):
+        field.on_blur = on_area_field_blur
     start_button.on_click = on_start
     stop_button.on_click = on_stop
 
@@ -174,13 +251,15 @@ def build_view(page: ft.Page) -> ft.View:
         [
             ft.Text("Image Overlay", size=24, weight=ft.FontWeight.BOLD),
             ft.Text(
-                "Pins an image on top of everything else on screen, at its "
-                "native size, with no window chrome or taskbar entry.",
+                "Pins an image on top of everything else on screen, inside "
+                "the area below, with no window chrome or taskbar entry.",
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
             ft.Row([pick_button, image_path_text]),
-            ft.Row([position_dropdown, margin_field]),
+            ft.Text("Area", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+            ft.Row([x_field, y_field, width_field, height_field]),
+            pick_area_button,
             ft.Text("Opacity", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
             opacity_slider,
             click_through_checkbox,
@@ -201,17 +280,23 @@ def build_view(page: ft.Page) -> ft.View:
 def build_settings(page: ft.Page) -> ft.Control:
     """The Image Overlay's Settings section: defaults for a fresh screen."""
 
-    def on_position_change(e: ft.Event[ft.Dropdown]):
-        set_widget_setting(page, WIDGET_ID, "default_position", e.control.value)
+    area = get_widget_setting(page, WIDGET_ID, "area", DEFAULT_AREA)
+    x_field = ft.TextField(label="X", value=str(area["x"]), width=90)
+    y_field = ft.TextField(label="Y", value=str(area["y"]), width=90)
+    width_field = ft.TextField(label="Width", value=str(area["width"]), width=90)
+    height_field = ft.TextField(label="Height", value=str(area["height"]), width=90)
 
-    def on_margin_blur(e: ft.Event[ft.TextField]):
-        try:
-            value = max(0, int(e.control.value or DEFAULT_MARGIN))
-        except ValueError:
-            value = DEFAULT_MARGIN
-        e.control.value = str(value)
+    def on_area_field_blur(e: ft.Event[ft.TextField]):
+        current = _parse_area(x_field, y_field, width_field, height_field, area)
+        x_field.value = str(current["x"])
+        y_field.value = str(current["y"])
+        width_field.value = str(current["width"])
+        height_field.value = str(current["height"])
         e.control.update()
-        set_widget_setting(page, WIDGET_ID, "default_margin", value)
+        set_widget_setting(page, WIDGET_ID, "area", current)
+
+    for field in (x_field, y_field, width_field, height_field):
+        field.on_blur = on_area_field_blur
 
     def on_opacity_change(e: ft.Event[ft.Slider]):
         set_widget_setting(page, WIDGET_ID, "default_opacity", e.control.value)
@@ -219,8 +304,6 @@ def build_settings(page: ft.Page) -> ft.Control:
     def on_click_through_change(e: ft.Event[ft.Checkbox]):
         set_widget_setting(page, WIDGET_ID, "default_click_through", e.control.value)
 
-    default_position = get_widget_setting(page, WIDGET_ID, "default_position", DEFAULT_POSITION)
-    default_margin = get_widget_setting(page, WIDGET_ID, "default_margin", DEFAULT_MARGIN)
     default_opacity = get_widget_setting(page, WIDGET_ID, "default_opacity", DEFAULT_OPACITY)
     default_click_through = get_widget_setting(
         page, WIDGET_ID, "default_click_through", DEFAULT_CLICK_THROUGH
@@ -230,23 +313,13 @@ def build_settings(page: ft.Page) -> ft.Control:
         [
             ft.Text(
                 "These are the values the Image Overlay screen starts with "
-                "each time it opens.",
+                "each time it opens. The area is also editable, and saved "
+                "immediately, from the Image Overlay screen itself.",
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
-            ft.Dropdown(
-                label="Default position",
-                value=default_position,
-                options=[ft.dropdown.Option(key=key, text=label) for key, label in POSITIONS],
-                width=180,
-                on_select=on_position_change,
-            ),
-            ft.TextField(
-                label="Default margin (px)",
-                value=str(default_margin),
-                width=200,
-                on_blur=on_margin_blur,
-            ),
+            ft.Text("Area", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+            ft.Row([x_field, y_field, width_field, height_field]),
             ft.Text("Default opacity", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Slider(
                 min=0.1,

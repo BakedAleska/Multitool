@@ -16,11 +16,20 @@ The backend prints one JSON line on startup: `{"ready": true}`, or
 protocol and no stdin protocol at all; the widget stops it by terminating
 the process, same as the Autoclicker indicator.
 
-## Positioning
+## Area
 
-The image shows at its native size, anchored to one of five presets (the
-four corners or center) with a configurable margin in pixels. There's no
-resizing; pick an image that's already the size you want on screen.
+The image shows at its native size, anchored to the top-left corner of a
+rectangular area (X, Y, Width, Height in screen pixels). There's no
+resizing; pick an image that's already the size you want on screen. If
+the area is smaller than the image, the image is clipped to it; if it's
+larger, the extra space is transparent on Windows (a solid near-black
+box on macOS, which has no equivalent transparency trick).
+
+The area can be typed in directly, or set by clicking "Pick area on
+screen...", which opens a fullscreen picker: the screen's edges are
+outlined in red, and you click and drag to draw a rectangle, then press
+Enter to confirm it (or Escape to cancel). Either way the area is saved
+immediately, so it's still there next time the app opens.
 
 ## Click-through
 
