@@ -1,6 +1,7 @@
 """The Settings screen."""
 
 import asyncio
+import sys
 
 import flet as ft
 
@@ -11,6 +12,7 @@ from multitool.state import (
     get_active_theme,
     get_compact_mode,
     get_installed_themes,
+    get_multi_instance,
     get_nav_position,
     get_place_id,
     get_show_avatars,
@@ -20,6 +22,7 @@ from multitool.state import (
     remove_theme,
     resolve_theme_mode,
     set_compact_mode,
+    set_multi_instance,
     set_nav_position,
     set_place_id,
     set_show_avatars,
@@ -72,6 +75,9 @@ def SettingsView(page: ft.Page) -> ft.View:
 
     def on_compact_mode_change(e: ft.Event[ft.Switch]):
         set_compact_mode(page, e.control.value)
+
+    def on_multi_instance_change(e: ft.Event[ft.Switch]):
+        set_multi_instance(page, e.control.value)
 
     def on_place_id_blur(e: ft.Event[ft.TextField]):
         """Parse a pasted place URL or id, and save the extracted id."""
@@ -221,6 +227,75 @@ def SettingsView(page: ft.Page) -> ft.View:
             ),
             theme_field,
             ft.FilledButton("Install", on_click=on_install_theme, style=thin_button_style()),
+            *(
+                [
+                    ft.Container(height=8),
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.Container(
+                                    content=ft.Text(
+                                        "Danger Zone",
+                                        size=16,
+                                        weight=ft.FontWeight.W_600,
+                                        color=ft.Colors.ERROR,
+                                    ),
+                                    padding=ft.Padding.only(left=16, right=16, top=12, bottom=12),
+                                ),
+                                ft.Container(
+                                    content=ft.Row(
+                                        [
+                                            ft.Column(
+                                                [
+                                                    ft.Text(
+                                                        "Allow multiple Roblox instances",
+                                                        weight=ft.FontWeight.W_500,
+                                                    ),
+                                                    ft.Text(
+                                                        "Lets Join open a second Roblox window "
+                                                        "instead of just switching to one that's "
+                                                        "already open, so more than one account "
+                                                        "can play at once. This works by bypassing "
+                                                        "a check Roblox uses to stop multiple "
+                                                        "instances from running. It's not "
+                                                        "something Roblox intends to be possible, "
+                                                        "and using "
+                                                        "it, especially in games with strict rules "
+                                                        "against automation or multi-accounting, "
+                                                        "risks the accounts involved.",
+                                                        size=12,
+                                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                                    ),
+                                                ],
+                                                spacing=2,
+                                                expand=True,
+                                            ),
+                                            ft.Switch(
+                                                value=get_multi_instance(page),
+                                                on_change=on_multi_instance_change,
+                                                active_color=ft.Colors.ERROR,
+                                                scale=SWITCH_SCALE,
+                                            ),
+                                        ],
+                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    ),
+                                    padding=16,
+                                    border=ft.Border(
+                                        top=ft.BorderSide(
+                                            1, ft.Colors.with_opacity(0.4, ft.Colors.ERROR)
+                                        )
+                                    ),
+                                ),
+                            ],
+                            spacing=0,
+                        ),
+                        border=ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.ERROR)),
+                        border_radius=radius_card(page),
+                    ),
+                ]
+                if sys.platform == "win32"
+                else []
+            ),
         ],
         spacing=12,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,

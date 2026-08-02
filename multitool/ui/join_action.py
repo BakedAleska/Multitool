@@ -7,7 +7,8 @@ import flet as ft
 from multitool.data import accounts as accounts_store
 from multitool.logs import get_logger
 from multitool.roblox.join import get_join_url
-from multitool.state import get_place_id
+from multitool.roblox.multi_instance import clear_singleton_instance
+from multitool.state import get_multi_instance, get_place_id
 from multitool.ui.toast import show_toast
 
 logger = get_logger(__name__)
@@ -35,6 +36,9 @@ async def join_with_account(page: ft.Page, account: dict) -> None:
         logger.warning("Join failed for account %s: %s", account.get("id"), ex)
         show_toast(page, f"Couldn't join. {ex}")
         return
+
+    if get_multi_instance(page):
+        await asyncio.to_thread(clear_singleton_instance)
 
     launcher = ft.UrlLauncher()
     not_installed_message = "Couldn't launch Roblox. Is it installed on this computer?"

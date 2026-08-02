@@ -49,6 +49,9 @@ DEFAULT_INSTALLED_THEMES = settings_store.DEFAULTS[INSTALLED_THEMES_KEY]
 WIDGET_SETTINGS_KEY = "widget_settings"
 DEFAULT_WIDGET_SETTINGS = settings_store.DEFAULTS[WIDGET_SETTINGS_KEY]
 
+MULTI_INSTANCE_KEY = "multi_instance"
+DEFAULT_MULTI_INSTANCE = settings_store.DEFAULTS[MULTI_INSTANCE_KEY]
+
 _SETTINGS_CACHE_KEY = "_settings_cache"
 
 
@@ -160,6 +163,17 @@ def set_widget_setting(page: ft.Page, widget_id: str, key: str, value) -> None:
     widget_settings = dict(current.get(WIDGET_SETTINGS_KEY, DEFAULT_WIDGET_SETTINGS))
     widget_settings[widget_id] = {**widget_settings.get(widget_id, {}), key: value}
     current[WIDGET_SETTINGS_KEY] = widget_settings
+    page.session.store.set(_SETTINGS_CACHE_KEY, current)
+    settings_store.save(current)
+
+
+def get_multi_instance(page: ft.Page) -> bool:
+    return _get_settings(page).get(MULTI_INSTANCE_KEY, DEFAULT_MULTI_INSTANCE)
+
+
+def set_multi_instance(page: ft.Page, value: bool) -> None:
+    current = _get_settings(page)
+    current[MULTI_INSTANCE_KEY] = value
     page.session.store.set(_SETTINGS_CACHE_KEY, current)
     settings_store.save(current)
 

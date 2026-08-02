@@ -21,6 +21,7 @@ DEFAULTS = {
     "disabled_widgets": [],
     "installed_themes": [],
     "widget_settings": {},
+    "multi_instance": False,
 }
 
 
