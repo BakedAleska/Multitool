@@ -1,7 +1,28 @@
+"""The contract a widget must implement, and shared helpers for it."""
+
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 import flet as ft
+
+
+@dataclass
+class DashboardTile:
+    """A single at-a-glance module a widget contributes to the Dashboard.
+
+    `build` returns only the tile's inner content, such as an icon and a
+    line of text. The Dashboard wraps it in the standard card chrome, so
+    widget tiles look consistent with the built-in ones.
+    """
+
+    id: str
+    """Unique (per-widget) id for this tile, e.g. "playtime"."""
+
+    build: Callable[[ft.Page], ft.Control]
+    """Given the page, return the tile's inner content."""
+
+    wide: bool = False
+    """If True, the tile spans two grid columns instead of one."""
 
 
 @dataclass
@@ -30,6 +51,11 @@ class Widget:
     """A ft.Icons value used when this widget's nav item is selected.
     Falls back to `icon` if not given."""
 
+    dashboard_tiles: Optional[Callable[[ft.Page], list[DashboardTile]]] = None
+    """Optional: given the page, return the tiles this widget contributes
+    to the Dashboard. Called fresh on every Dashboard build, so tiles can
+    reflect current state. Omit, or return [], to contribute nothing."""
+
 
 def get_widget_data(account: dict, widget_id: str) -> dict:
     """Read this widget's namespaced data out of an account dict.
@@ -42,7 +68,7 @@ def get_widget_data(account: dict, widget_id: str) -> dict:
 def set_widget_data(account: dict, widget_id: str, data: dict) -> None:
     """Write this widget's namespaced data into an account dict, in place.
 
-    Caller is still responsible for saving the account list back out via
-    app.data.accounts.save(...) — this only mutates the dict in memory.
+    This only mutates the dict in memory. The caller must still save the
+    account list with app.data.accounts.save(...).
     """
     account.setdefault("widget_data", {})[widget_id] = data

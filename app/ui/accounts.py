@@ -1,3 +1,5 @@
+"""The Accounts screen: list, add, remove, join, and reorder tracked accounts."""
+
 import asyncio
 import json
 import sys
@@ -9,10 +11,11 @@ import httpx
 
 from app.data import accounts as accounts_store
 from app.logs import get_logger
-from app.roblox.join import get_join_url
-from app.state import get_compact_mode, get_place_id, get_show_avatars, get_sort_order
+from app.state import get_compact_mode, get_show_avatars, get_sort_order
+from app.ui.join_action import join_with_account
 from app.ui.layout import build_layout
-from app.ui.toast import show_confirm_toast, show_toast
+from app.ui.style import card_border, radius_card
+from app.ui.toast import show_confirm_toast
 
 logger = get_logger(__name__)
 
@@ -26,6 +29,11 @@ THUMBNAIL_URL = "https://thumbnails.roblox.com/v1/users/avatar-headshot"
 
 
 def fetch_profile(user_id: int) -> dict:
+    """Fetch a user's display name and avatar URL from Roblox's public APIs.
+
+    Missing pieces are left out of the result instead of raising. Used
+    to backfill accounts added before these fields were tracked.
+    """
     profile = {}
 
     try:
@@ -58,6 +66,11 @@ def fetch_profile(user_id: int) -> dict:
 
 
 def sort_accounts(accounts: list[dict], sort_order: str) -> list[dict]:
+    """Sort accounts for display, according to the given sort order.
+
+    "manual" returns the list as stored. Drag reordering writes the new
+    order to disk directly, so no sorting is needed here for that case.
+    """
     if sort_order == "alphabetical":
         return sorted(accounts, key=lambda a: (a.get("display_name") or a["name"]).lower())
     if sort_order == "manual":
@@ -66,13 +79,27 @@ def sort_accounts(accounts: list[dict], sort_order: str) -> list[dict]:
 
 
 def AccountsView(page: ft.Page) -> ft.View:
+    """The Accounts screen.
+
+    Every mutation, such as add, remove, reorder, or edit notes, reads
+    the current list from disk with accounts_store.load(), applies the
+    change, writes it back, and calls refresh() to rebuild the view.
+    There is no in-memory account store beyond that load and save pair.
+    """
+
     def refresh():
+        """Rebuild this view in place, if it's still the one on screen."""
         if not page.views or page.views[-1].route != "/accounts":
             return
         page.views[-1] = AccountsView(page)
         page.update()
 
     async def backfill_missing_profiles():
+        """Fill in display_name and avatar_url for older accounts.
+
+        Runs once per view build and calls refresh() only if something
+        changed.
+        """
         current = accounts_store.load()
         missing = [a for a in current if not a.get("avatar_url") or not a.get("display_name")]
         if not missing:
@@ -93,6 +120,7 @@ def AccountsView(page: ft.Page) -> ft.View:
             refresh()
 
     def add_account(payload: dict):
+        """Add a newly logged in account, unless it's already tracked."""
         current = accounts_store.load()
         if not any(a["id"] == payload["id"] for a in current):
             current.append(
@@ -110,12 +138,14 @@ def AccountsView(page: ft.Page) -> ft.View:
         refresh()
 
     def remove_account(user_id: int):
+        """Remove one account by id."""
         current = accounts_store.load()
         current = [a for a in current if a["id"] != user_id]
         accounts_store.save(current)
         refresh()
 
     def save_notes(user_id: int, notes: str):
+        """Save an edited notes field for one account."""
         current = accounts_store.load()
         for a in current:
             if a["id"] == user_id:
@@ -124,6 +154,12 @@ def AccountsView(page: ft.Page) -> ft.View:
         accounts_store.save(current)
 
     async def open_add_account(e: ft.Event[ft.IconButton]):
+        """Run the Roblox login flow and add the resulting account.
+
+        Spawns ``python -m app.roblox.login`` as a subprocess and reads
+        the JSON line it prints to stdout on success. See that module's
+        docstring for why it must run separately.
+        """
         add_button.disabled = True
         page.update()
 
@@ -152,44 +188,21 @@ def AccountsView(page: ft.Page) -> ft.View:
 
         add_account(payload)
 
-    async def join_with_account(account: dict):
-        place_id = get_place_id(page)
-        if not place_id:
-            show_toast(page, "Set a place ID in Settings first.")
-            return
-
-        security_cookie = account.get("security_cookie")
-        if not security_cookie:
-            show_toast(page, "No saved session for this account — remove and re-add it.")
-            return
-
-        try:
-            join_url = await asyncio.to_thread(get_join_url, security_cookie, place_id)
-        except Exception as ex:
-            logger.warning("Join failed for account %s: %s", account.get("id"), ex)
-            show_toast(page, f"Couldn't join: {ex}")
-            return
-
-        launcher = ft.UrlLauncher()
-        not_installed_message = "Couldn't launch Roblox — is it installed on this computer?"
-
-        try:
-            can_launch = await launcher.can_launch_url(join_url)
-        except Exception as e:
-            logger.warning("can_launch_url check failed, assuming true: %s", e)
-            can_launch = True
-
-        if not can_launch:
-            show_toast(page, not_installed_message)
-            return
-
-        try:
-            await launcher.launch_url(join_url)
-        except Exception as e:
-            logger.warning("launch_url failed: %s", e)
-            show_toast(page, not_installed_message)
-
     def build_account_card(account: dict, sort_order: str) -> ft.Control:
+        """Build one account row, with its play, remove, and drag controls.
+
+        The controls are placed as Stack overlays with fixed top and
+        right offsets. The one exception is compact mode with manual
+        sort, where play, remove, and the drag handle sit together in a
+        real Row instead, so Flet can center them against each other's
+        actual size instead of relying on fixed offsets. In that row the
+        order is play, remove, then drag handle.
+
+        Outside compact mode, the drag handle's top offset lines up with
+        the bottom of the avatar frame. The handle's own padding is set
+        to match IconButton's default padding, so it sits flush with the
+        play and remove buttons next to it.
+        """
         username = account["name"]
         display_name = account.get("display_name") or username
         if display_name and display_name != username:
@@ -239,7 +252,6 @@ def AccountsView(page: ft.Page) -> ft.View:
             )
 
         is_manual = sort_order == "manual"
-        # In the compact 3-icon row, order left-to-right as: play, remove, move.
         compact_row = compact and is_manual
 
         row_controls.append(ft.Column(column_controls, expand=True, spacing=2))
@@ -260,8 +272,8 @@ def AccountsView(page: ft.Page) -> ft.View:
                 bottom=card_padding,
                 right=card_padding + button_clearance,
             ),
-            border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT),
-            border_radius=8,
+            border=card_border(),
+            border_radius=radius_card(page),
         )
 
         stack_controls = [card]
@@ -271,10 +283,11 @@ def AccountsView(page: ft.Page) -> ft.View:
 
         if is_manual:
             handle_icon_size = 18
-            handle_padding = 8  # matches IconButton's default padding, for a flush look
+            handle_padding = 8
             handle_box_size = handle_icon_size + handle_padding * 2
 
             def on_handle_hover(e: ft.Event[ft.Container]):
+                """Fade the drag handle in and out on hover."""
                 e.control.opacity = 1.0 if e.data == "true" else 0.4
                 e.control.update()
 
@@ -299,7 +312,7 @@ def AccountsView(page: ft.Page) -> ft.View:
             icon=ft.Icons.PLAY_CIRCLE_OUTLINE,
             icon_size=18,
             tooltip="Join place",
-            on_click=lambda e, a=account: page.run_task(join_with_account, a),
+            on_click=lambda e, a=account: page.run_task(join_with_account, page, a),
         )
 
         remove_button = ft.IconButton(
@@ -312,12 +325,6 @@ def AccountsView(page: ft.Page) -> ft.View:
         )
 
         if compact_row:
-            # Lay these out together in a real Row so Flet centers them
-            # against each other's actual rendered size, rather than us
-            # guessing pixel offsets that never quite matched IconButton's.
-            # top+bottom (both set, no explicit height) stretches this
-            # wrapper to the card's full height, so the row can be
-            # vertically centered within it instead of hugging the top.
             stack_controls.append(
                 ft.Container(
                     content=ft.Row(
@@ -342,9 +349,6 @@ def AccountsView(page: ft.Page) -> ft.View:
                 if compact:
                     handle_top = 2
                 else:
-                    # Bottom of the handle lines up with the bottom of the
-                    # avatar frame (a fixed, known offset), regardless of
-                    # card height.
                     handle_top = (
                         card_padding + avatar_size - handle_box_size if show_avatars else 2
                     )
@@ -364,6 +368,7 @@ def AccountsView(page: ft.Page) -> ft.View:
     if sort_order == "manual":
 
         def on_reorder(e: ft.OnReorderEvent):
+            """Move one account to its new position and save the order."""
             current = accounts_store.load()
             item = current.pop(e.old_index)
             current.insert(e.new_index, item)
