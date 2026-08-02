@@ -28,7 +28,13 @@ from multitool.state import (
 )
 from multitool.theme import build_theme, parse_theme_input
 from multitool.ui.layout import build_layout
-from multitool.ui.style import card_border, radius_card
+from multitool.ui.style import (
+    SWITCH_SCALE,
+    card_border,
+    radius_card,
+    scroll_margin,
+    thin_button_style,
+)
 from multitool.ui.toast import show_toast
 from multitool.widgets.loader import discover_widgets
 
@@ -111,6 +117,14 @@ def SettingsView(page: ft.Page) -> ft.View:
         show_toast(page, f'"{theme["name"]}" installed and applied.')
 
     def on_remove_theme(theme_id: str):
+        """Build a click handler that removes one installed theme.
+
+        If the removed theme was the active appearance, falls back to
+        resolving the theme mode fresh and rebuilding with no custom
+        theme, so the page never keeps applying a theme that no longer
+        exists.
+        """
+
         def handler(e: ft.Event[ft.IconButton]):
             was_active = get_theme_mode(page) == theme_id
             remove_theme(page, theme_id)
@@ -206,11 +220,12 @@ def SettingsView(page: ft.Page) -> ft.View:
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
             theme_field,
-            ft.FilledButton("Install", on_click=on_install_theme),
+            ft.FilledButton("Install", on_click=on_install_theme, style=thin_button_style()),
         ],
         spacing=12,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         scroll=ft.ScrollMode.AUTO,
+        margin=scroll_margin(),
     )
 
     accounts_tab = ft.Column(
@@ -232,6 +247,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                     ft.Switch(
                         value=get_show_avatars(page),
                         on_change=on_show_avatars_change,
+                        scale=SWITCH_SCALE,
                     ),
                 ],
             ),
@@ -252,6 +268,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                     ft.Switch(
                         value=get_compact_mode(page),
                         on_change=on_compact_mode_change,
+                        scale=SWITCH_SCALE,
                     ),
                 ],
             ),
@@ -261,7 +278,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                 on_change=on_sort_order_change,
                 content=ft.Row(
                     [
-                        ft.Radio(value="date_added", label="Date added"),
+                        ft.Radio(value="last_played", label="Last played"),
                         ft.Radio(value="alphabetical", label="Alphabetical"),
                         ft.Radio(value="manual", label="Manual"),
                     ]
@@ -283,6 +300,7 @@ def SettingsView(page: ft.Page) -> ft.View:
         spacing=12,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         scroll=ft.ScrollMode.AUTO,
+        margin=scroll_margin(),
     )
 
     WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -341,6 +359,7 @@ def SettingsView(page: ft.Page) -> ft.View:
         spacing=16,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         scroll=ft.ScrollMode.AUTO,
+        margin=scroll_margin(),
     )
 
     content = ft.Column(

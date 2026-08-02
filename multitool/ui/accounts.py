@@ -14,7 +14,7 @@ from multitool.logs import get_logger
 from multitool.state import get_compact_mode, get_show_avatars, get_sort_order
 from multitool.ui.join_action import join_with_account
 from multitool.ui.layout import build_layout
-from multitool.ui.style import card_border, radius_card
+from multitool.ui.style import card_border, radius_card, scroll_padding
 from multitool.ui.toast import show_confirm_toast
 
 logger = get_logger(__name__)
@@ -70,12 +70,18 @@ def sort_accounts(accounts: list[dict], sort_order: str) -> list[dict]:
 
     "manual" returns the list as stored. Drag reordering writes the new
     order to disk directly, so no sorting is needed here for that case.
+    "last_played" puts the most recently played account first, falling
+    back to an account's added_at if it's never been played.
     """
     if sort_order == "alphabetical":
         return sorted(accounts, key=lambda a: (a.get("display_name") or a["name"]).lower())
     if sort_order == "manual":
         return list(accounts)
-    return sorted(accounts, key=lambda a: a.get("added_at", 0))
+    return sorted(
+        accounts,
+        key=lambda a: a.get("last_played_at") or a.get("added_at", 0),
+        reverse=True,
+    )
 
 
 def AccountsView(page: ft.Page) -> ft.View:
@@ -356,14 +362,11 @@ def AccountsView(page: ft.Page) -> ft.View:
                     ft.Container(content=drag_handle_widget, top=handle_top, right=2)
                 )
 
-        return ft.Stack(
-            stack_controls,
-            key=str(account["id"]),
-        )
+        return ft.Stack(stack_controls)
 
     sort_order = get_sort_order(page)
     accounts = sort_accounts(accounts_store.load(), sort_order)
-    list_spacing = 4 if get_compact_mode(page) else 8
+    list_spacing = 8 if get_compact_mode(page) else 14
 
     if sort_order == "manual":
 
@@ -376,17 +379,25 @@ def AccountsView(page: ft.Page) -> ft.View:
             refresh()
 
         account_list: ft.Control = ft.ReorderableListView(
-            controls=[build_account_card(a, sort_order) for a in accounts],
+            controls=[
+                ft.Container(
+                    content=build_account_card(a, sort_order),
+                    key=str(a["id"]),
+                    margin=ft.Margin.only(bottom=list_spacing),
+                )
+                for a in accounts
+            ],
             expand=True,
-            spacing=list_spacing,
             show_default_drag_handles=False,
             on_reorder=on_reorder,
+            padding=scroll_padding(),
         )
     else:
         account_list = ft.ListView(
             controls=[build_account_card(a, sort_order) for a in accounts],
             expand=True,
             spacing=list_spacing,
+            padding=scroll_padding(),
         )
 
     add_button = ft.IconButton(

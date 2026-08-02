@@ -15,7 +15,7 @@ DEFAULTS = {
     "sidebar_pos": "left",
     "theme_mode": "system",
     "show_avatars": True,
-    "sort_order": "date_added",
+    "sort_order": "last_played",
     "compact_mode": False,
     "place_id": "",
     "disabled_widgets": [],
