@@ -20,6 +20,7 @@ from multitool.ui.dashboard import DashboardView  # noqa: E402
 from multitool.ui.settings import SettingsView  # noqa: E402
 from multitool.ui.widgets import WidgetsView  # noqa: E402
 from multitool.widgets.loader import get_enabled_widgets  # noqa: E402
+from multitool.widgets.process import stop_all_processes  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -41,6 +42,18 @@ def main(page: ft.Page):
         logger.error(message, exc_info=exception)
 
     page.session.connection.loop.set_exception_handler(handle_loop_exception)
+
+    def on_window_event(e: ft.WindowEvent):
+        """Stop any process a widget started before the window closes.
+
+        Without this, a widget backend such as an autoclicker's click
+        loop would keep running as an orphaned process after the app
+        window closes.
+        """
+        if e.type == ft.WindowEventType.CLOSE:
+            stop_all_processes(page)
+
+    page.window.on_event = on_window_event
 
     page.title = "Multitool"
     page.theme_mode = resolve_theme_mode(page)
