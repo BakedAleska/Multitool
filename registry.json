@@ -6,15 +6,15 @@
       "name": "Autoclicker",
       "description": "Clicks repeatedly at the cursor, with a configurable interval.",
       "author": "BakedAleska",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "icon": null,
       "source": {
         "owner": "BakedAleska",
         "repo": "Multitool",
-        "ref": "dbb90f8b2ae59320484501f0002f36cbccd2638c",
+        "ref": "e29faf77ff085cb3c91bc9c8398bae99d1c38a6b",
         "path": "widgets/autoclicker"
       },
-      "sha256": "da9fbf7e938ae191b1a0156519d072a0995025d9cdf7a7dcff24665b1177a8ab",
+      "sha256": "ece8e0d4576611e0eb8ac2145e54af3d66626f61a05b5883092606a2bc0e2b16",
       "homepage": "https://github.com/BakedAleska/Multitool/tree/main/widgets/autoclicker"
     }
   ]
