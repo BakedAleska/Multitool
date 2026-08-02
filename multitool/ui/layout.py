@@ -63,7 +63,14 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
     widgets_section = None
     widgets = get_enabled_widgets(page)
     if widgets:
-        rows: list[ft.Control] = [ft.Divider(height=1)]
+        rows: list[ft.Control] = [
+            ft.Container(
+                width=48,
+                height=1,
+                bgcolor=ft.Colors.OUTLINE_VARIANT,
+                margin=ft.Margin.symmetric(horizontal=12, vertical=8),
+            )
+        ]
         for widget in widgets:
             selected = current_route == widget_route(widget.id)
             icon = (widget.selected_icon if selected else None) or widget.icon or ft.Icons.EXTENSION
@@ -83,7 +90,9 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
                     on_click=lambda e, wid=widget.id: page.run_task(go_to_widget, wid),
                 )
             )
-        widgets_section = ft.Column(rows, spacing=4)
+        widgets_section = ft.Column(
+            rows, spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
 
     github_button = ft.IconButton(
         icon=ft.Image(
@@ -103,6 +112,7 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
         destinations=CORE_DESTINATIONS,
         trailing=widgets_section,
         on_change=on_core_change,
+        scrollable=True,
     )
 
     nav_sidebar = ft.Stack(

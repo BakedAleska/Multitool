@@ -143,6 +143,33 @@ def parse_theme_input(raw_input: str) -> tuple[Optional[dict], Optional[str]]:
     return theme, None
 
 
+SCROLLBAR_THICKNESS = 6
+"""Width of every scrollbar in the app, in logical pixels. Kept slim and
+uniform (see build_theme's scrollbar_theme) so a scrollbar reads as a
+quiet edge detail rather than competing with the content next to it.
+"""
+
+
+def _scrollbar_theme(theme: Optional[dict]) -> ft.ScrollbarTheme:
+    """The app-wide scrollbar look: a thin, fully rounded thumb with no
+    visible track, so every scrollable list, grid, and column shares one
+    consistent style. Falls back to the theme's outline/divider color if
+    it sets one, otherwise Material's default outline color.
+    """
+    thumb_color = (theme or {}).get("divider_color")
+    return ft.ScrollbarTheme(
+        thickness=SCROLLBAR_THICKNESS,
+        radius=SCROLLBAR_THICKNESS / 2,
+        thumb_color=thumb_color or ft.Colors.OUTLINE_VARIANT,
+        track_color=ft.Colors.TRANSPARENT,
+        track_visibility=False,
+        thumb_visibility=False,
+        interactive=True,
+        cross_axis_margin=2,
+        main_axis_margin=2,
+    )
+
+
 def build_theme(theme: Optional[dict]) -> ft.Theme:
     """Build the app's Theme, applying an installed theme's overrides if any.
 
@@ -157,7 +184,8 @@ def build_theme(theme: Optional[dict]) -> ft.Theme:
             linux=ft.PageTransitionTheme.NONE,
             android=ft.PageTransitionTheme.NONE,
             ios=ft.PageTransitionTheme.NONE,
-        )
+        ),
+        "scrollbar_theme": _scrollbar_theme(theme),
     }
 
     if theme:
