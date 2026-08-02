@@ -85,6 +85,18 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
             )
         widgets_section = ft.Column(rows, spacing=4)
 
+    github_button = ft.IconButton(
+        icon=ft.Image(
+            src="github.svg",
+            width=20,
+            height=20,
+            color=ft.Colors.ON_SURFACE,
+            color_blend_mode=ft.BlendMode.SRC_IN,
+        ),
+        tooltip="Open the Multitool repo on GitHub",
+        url="https://github.com/BakedAleska",
+    )
+
     nav_rail = ft.NavigationRail(
         selected_index=core_selected,
         label_type=ft.NavigationRailLabelType.ALL,
@@ -93,13 +105,26 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
         on_change=on_core_change,
     )
 
+    nav_sidebar = ft.Stack(
+        [
+            nav_rail,
+            ft.Container(
+                content=github_button,
+                left=0,
+                right=0,
+                bottom=8,
+                alignment=ft.Alignment.CENTER,
+            ),
+        ]
+    )
+
     content_area = ft.Container(content=content, expand=True, padding=20)
     divider = ft.VerticalDivider(width=1)
 
     if get_nav_position(page) == "right":
-        row_controls = [content_area, divider, nav_rail]
+        row_controls = [content_area, divider, nav_sidebar]
     else:
-        row_controls = [nav_rail, divider, content_area]
+        row_controls = [nav_sidebar, divider, content_area]
 
     row = ft.Row(row_controls, expand=True, spacing=0)
 
@@ -111,7 +136,7 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
 
 
 def _background_image(page: ft.Page) -> ft.Control | None:
-    """The active theme's background image, or None if it has none."""
+    """The active custom theme's background image, or None if it has none."""
     if not is_named_theme_active(page):
         return None
 
