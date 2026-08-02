@@ -4,9 +4,9 @@ import asyncio
 
 import flet as ft
 
-from app.config import WIDGETS_DIR
-from app.roblox.join import extract_place_id
-from app.state import (
+from multitool.config import WIDGETS_DIR
+from multitool.roblox.join import extract_place_id
+from multitool.state import (
     THEME_MODE_MAP,
     get_compact_mode,
     get_custom_theme,
@@ -24,9 +24,9 @@ from app.state import (
     set_sort_order,
     set_theme_mode,
 )
-from app.theme import build_theme, parse_theme_input
-from app.ui.layout import build_layout
-from app.ui.toast import show_toast
+from multitool.theme import build_theme, parse_theme_input
+from multitool.ui.layout import build_layout
+from multitool.ui.toast import show_toast
 
 
 def SettingsView(page: ft.Page) -> ft.View:

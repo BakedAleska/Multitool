@@ -2,10 +2,10 @@
 
 import flet as ft
 
-from app.state import get_custom_theme, get_nav_position, is_custom_theme_active
-from app.theme import BACKGROUND_FIT_MAP
-from app.ui.style import radius_card
-from app.widgets.loader import get_enabled_widgets
+from multitool.state import get_custom_theme, get_nav_position, is_custom_theme_active
+from multitool.theme import BACKGROUND_FIT_MAP
+from multitool.ui.style import radius_card
+from multitool.widgets.loader import get_enabled_widgets
 
 CORE_ROUTES = ["/", "/accounts", "/widgets", "/settings"]
 

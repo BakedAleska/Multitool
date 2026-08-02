@@ -3,14 +3,14 @@
 Each setting has a get and a set function below. Both go through
 _get_settings, which caches the loaded settings dict on the page's
 session so repeated reads in one build don't hit disk each time. Never
-read or write app.data.settings directly from UI code.
+read or write multitool.data.settings directly from UI code.
 """
 
 from typing import Optional
 
 import flet as ft
 
-from app.data import settings as settings_store
+from multitool.data import settings as settings_store
 
 NAV_POSITION_KEY = "sidebar_pos"
 DEFAULT_NAV_POSITION = settings_store.DEFAULTS[NAV_POSITION_KEY]
@@ -25,7 +25,7 @@ THEME_MODE_MAP = {
 }
 """Maps the theme_mode setting to Flet's ThemeMode. "custom" has no
 ThemeMode of its own, so it renders at system brightness while
-app.theme.build_theme layers the saved custom theme on top.
+multitool.theme.build_theme layers the saved custom theme on top.
 """
 
 SHOW_AVATARS_KEY = "show_avatars"
@@ -157,7 +157,7 @@ def set_custom_theme(page: ft.Page, theme: Optional[dict], source: str) -> None:
     """Save a parsed custom theme, along with the raw input it came from.
 
     The raw source is kept only so Settings can show back what's active.
-    theme is what actually gets applied, via app.theme.build_theme.
+    theme is what actually gets applied, via multitool.theme.build_theme.
     """
     current = _get_settings(page)
     current[CUSTOM_THEME_KEY] = theme

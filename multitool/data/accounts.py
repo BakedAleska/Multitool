@@ -10,8 +10,8 @@ import os
 import stat
 import time
 
-from app.config import DATA_DIR
-from app.logs import get_logger
+from multitool.config import DATA_DIR
+from multitool.logs import get_logger
 
 logger = get_logger(__name__)
 

@@ -6,8 +6,8 @@ from typing import Optional
 import flet as ft
 import httpx
 
-from app.config import WIDGET_REGISTRY_URL
-from app.logs import get_logger
+from multitool.config import WIDGET_REGISTRY_URL
+from multitool.logs import get_logger
 
 logger = get_logger(__name__)
 
@@ -44,7 +44,7 @@ def fetch_registry() -> tuple[list[CatalogEntry], Optional[str]]:
 
     Never raises. Returns ([], error_message) on any failure, following
     the same (list, errors) convention as
-    app.widgets.loader.discover_widgets(). A malformed entry is skipped
+    multitool.widgets.loader.discover_widgets(). A malformed entry is skipped
     rather than failing the whole fetch.
     """
     try:

@@ -4,11 +4,11 @@ import asyncio
 
 import flet as ft
 
-from app.data import accounts as accounts_store
-from app.logs import get_logger
-from app.roblox.join import get_join_url
-from app.state import get_place_id
-from app.ui.toast import show_toast
+from multitool.data import accounts as accounts_store
+from multitool.logs import get_logger
+from multitool.roblox.join import get_join_url
+from multitool.state import get_place_id
+from multitool.ui.toast import show_toast
 
 logger = get_logger(__name__)
 

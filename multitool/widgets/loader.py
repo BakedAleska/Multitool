@@ -5,10 +5,10 @@ import sys
 
 import flet as ft
 
-from app.config import WIDGETS_DIR
-from app.logs import get_logger
-from app.state import get_disabled_widgets
-from app.widgets.api import Widget
+from multitool.config import WIDGETS_DIR
+from multitool.logs import get_logger
+from multitool.state import get_disabled_widgets
+from multitool.widgets.api import Widget
 
 logger = get_logger(__name__)
 

@@ -7,7 +7,7 @@ write to a single rotating file at ``<DATA_DIR>/logs/multitool.log``.
 import logging
 import logging.handlers
 
-from app.config import DATA_DIR
+from multitool.config import DATA_DIR
 
 LOG_DIR = DATA_DIR / "logs"
 LOG_FILE = LOG_DIR / "multitool.log"
@@ -19,7 +19,7 @@ _configured = False
 def _configure() -> None:
     """Set up the root "multitool" logger. Runs once, on first use.
 
-    Propagation to Python's root logger is disabled. app/roblox/login.py
+    Propagation to Python's root logger is disabled. multitool/roblox/login.py
     runs as a subprocess and prints a single JSON line to stdout as its
     protocol back to the main app. That line must stay clean.
     """
@@ -45,8 +45,16 @@ def get_logger(name: str) -> logging.Logger:
     """A logger that writes to <data dir>/logs/multitool.log.
 
     Safe to call from anywhere, including the standalone
-    app/roblox/login.py subprocess. Configuration happens lazily on
+    multitool/roblox/login.py subprocess. Configuration happens lazily on
     first use.
+
+    `name` is almost always `__name__`, which is already dotted under
+    `multitool` for any regularly imported module (e.g. `multitool.state`).
+    The one exception is a module run directly as a script, such as the
+    login subprocess, where `__name__` is `"__main__"` instead - that case
+    still needs the root prefix added so it lands under the same logger tree.
     """
     _configure()
-    return logging.getLogger(f"{_ROOT_LOGGER_NAME}.{name}")
+    if name != _ROOT_LOGGER_NAME and not name.startswith(f"{_ROOT_LOGGER_NAME}."):
+        name = f"{_ROOT_LOGGER_NAME}.{name}"
+    return logging.getLogger(name)

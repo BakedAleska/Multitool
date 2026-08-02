@@ -4,24 +4,24 @@ import asyncio
 
 import flet as ft
 
-from app.state import get_disabled_widgets, set_widget_enabled
-from app.ui.layout import build_layout
-from app.ui.style import card_border, radius_card
-from app.ui.toast import show_toast
-from app.widgets.catalog import (
+from multitool.state import get_disabled_widgets, set_widget_enabled
+from multitool.ui.layout import build_layout
+from multitool.ui.style import card_border, radius_card
+from multitool.ui.toast import show_toast
+from multitool.widgets.catalog import (
     CatalogEntry,
     fetch_registry,
     get_cached_registry,
     set_cached_registry,
 )
-from app.widgets.installer import (
+from multitool.widgets.installer import (
     WidgetInstallError,
     install_widget,
     is_installing,
     mark_installing,
     unmark_installing,
 )
-from app.widgets.loader import discover_widgets
+from multitool.widgets.loader import discover_widgets
 
 _CATALOGUE_FETCHED_KEY = "_widget_catalogue_fetched"
 _CATALOGUE_ERROR_KEY = "_widget_catalogue_error"

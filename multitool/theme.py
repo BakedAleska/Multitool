@@ -23,7 +23,7 @@ from typing import Optional
 import flet as ft
 import httpx
 
-from app.logs import get_logger
+from multitool.logs import get_logger
 
 logger = get_logger(__name__)
 

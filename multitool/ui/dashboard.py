@@ -4,14 +4,14 @@ import time
 
 import flet as ft
 
-from app.data import accounts as accounts_store
-from app.logs import get_logger
-from app.state import get_compact_mode, get_show_avatars, get_sort_order
-from app.ui.accounts import sort_accounts
-from app.ui.join_action import join_with_account
-from app.ui.layout import build_layout
-from app.ui.style import card_border, radius_hero
-from app.widgets.loader import get_enabled_widgets
+from multitool.data import accounts as accounts_store
+from multitool.logs import get_logger
+from multitool.state import get_compact_mode, get_show_avatars, get_sort_order
+from multitool.ui.accounts import sort_accounts
+from multitool.ui.join_action import join_with_account
+from multitool.ui.layout import build_layout
+from multitool.ui.style import card_border, radius_hero
+from multitool.widgets.loader import get_enabled_widgets
 
 logger = get_logger(__name__)
 

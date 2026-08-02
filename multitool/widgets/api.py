@@ -69,6 +69,6 @@ def set_widget_data(account: dict, widget_id: str, data: dict) -> None:
     """Write this widget's namespaced data into an account dict, in place.
 
     This only mutates the dict in memory. The caller must still save the
-    account list with app.data.accounts.save(...).
+    account list with multitool.data.accounts.save(...).
     """
     account.setdefault("widget_data", {})[widget_id] = data

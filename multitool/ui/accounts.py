@@ -9,13 +9,13 @@ from pathlib import Path
 import flet as ft
 import httpx
 
-from app.data import accounts as accounts_store
-from app.logs import get_logger
-from app.state import get_compact_mode, get_show_avatars, get_sort_order
-from app.ui.join_action import join_with_account
-from app.ui.layout import build_layout
-from app.ui.style import card_border, radius_card
-from app.ui.toast import show_confirm_toast
+from multitool.data import accounts as accounts_store
+from multitool.logs import get_logger
+from multitool.state import get_compact_mode, get_show_avatars, get_sort_order
+from multitool.ui.join_action import join_with_account
+from multitool.ui.layout import build_layout
+from multitool.ui.style import card_border, radius_card
+from multitool.ui.toast import show_confirm_toast
 
 logger = get_logger(__name__)
 
@@ -156,7 +156,7 @@ def AccountsView(page: ft.Page) -> ft.View:
     async def open_add_account(e: ft.Event[ft.IconButton]):
         """Run the Roblox login flow and add the resulting account.
 
-        Spawns ``python -m app.roblox.login`` as a subprocess and reads
+        Spawns ``python -m multitool.roblox.login`` as a subprocess and reads
         the JSON line it prints to stdout on success. See that module's
         docstring for why it must run separately.
         """
@@ -167,7 +167,7 @@ def AccountsView(page: ft.Page) -> ft.View:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
                 "-m",
-                "app.roblox.login",
+                "multitool.roblox.login",
                 cwd=PROJECT_ROOT,
                 stdout=asyncio.subprocess.PIPE,
             )

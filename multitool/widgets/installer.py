@@ -9,9 +9,9 @@ import zipfile
 import flet as ft
 import httpx
 
-from app.config import WIDGETS_DIR
-from app.logs import get_logger
-from app.widgets.catalog import CatalogEntry
+from multitool.config import WIDGETS_DIR
+from multitool.logs import get_logger
+from multitool.widgets.catalog import CatalogEntry
 
 logger = get_logger(__name__)
 
@@ -31,7 +31,7 @@ def install_widget(entry: CatalogEntry) -> None:
     WidgetInstallError with a user-facing message on any failure.
 
     Extraction happens in a dot-prefixed staging directory, which
-    app.widgets.loader.discover_widgets() ignores. The staging directory
+    multitool.widgets.loader.discover_widgets() ignores. The staging directory
     is only moved into place after the install fully succeeds, so a
     failed install never leaves a broken folder at WIDGETS_DIR/<id>.
     """

@@ -2,8 +2,8 @@
 
 pywebview needs to own the main thread. Flet's own event loop already
 occupies the main thread in the parent process, so this module is
-launched separately with ``python -m app.roblox.login`` (see
-app/ui/accounts.py) instead of being embedded in the main app.
+launched separately with ``python -m multitool.roblox.login`` (see
+multitool/ui/accounts.py) instead of being embedded in the main app.
 
 IPC with the parent process is a single JSON line on stdout. This
 process never prints anything else.
@@ -16,7 +16,7 @@ from typing import Optional
 import httpx
 import webview
 
-from app.logs import get_logger
+from multitool.logs import get_logger
 
 logger = get_logger(__name__)
 
