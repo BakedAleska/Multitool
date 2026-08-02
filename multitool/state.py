@@ -6,26 +6,26 @@ session so repeated reads in one build don't hit disk each time. Never
 read or write multitool.data.settings directly from UI code.
 """
 
+import re
 from typing import Optional
 
 import flet as ft
 
 from multitool.data import settings as settings_store
+from multitool.theme import theme_brightness_mode
 
 NAV_POSITION_KEY = "sidebar_pos"
 DEFAULT_NAV_POSITION = settings_store.DEFAULTS[NAV_POSITION_KEY]
 
 THEME_MODE_KEY = "theme_mode"
 DEFAULT_THEME_MODE = settings_store.DEFAULTS[THEME_MODE_KEY]
-THEME_MODE_MAP = {
+BUILT_IN_THEME_MODES = {
     "system": ft.ThemeMode.SYSTEM,
     "light": ft.ThemeMode.LIGHT,
     "dark": ft.ThemeMode.DARK,
-    "custom": ft.ThemeMode.SYSTEM,
 }
-"""Maps the theme_mode setting to Flet's ThemeMode. "custom" has no
-ThemeMode of its own, so it renders at system brightness while
-multitool.theme.build_theme layers the saved custom theme on top.
+"""The always-available appearance choices. Anything else in theme_mode
+is the id of an installed theme, resolved via get_installed_themes.
 """
 
 SHOW_AVATARS_KEY = "show_avatars"
@@ -43,11 +43,8 @@ DEFAULT_PLACE_ID = settings_store.DEFAULTS[PLACE_ID_KEY]
 DISABLED_WIDGETS_KEY = "disabled_widgets"
 DEFAULT_DISABLED_WIDGETS = settings_store.DEFAULTS[DISABLED_WIDGETS_KEY]
 
-CUSTOM_THEME_KEY = "custom_theme"
-DEFAULT_CUSTOM_THEME = settings_store.DEFAULTS[CUSTOM_THEME_KEY]
-
-CUSTOM_THEME_SOURCE_KEY = "custom_theme_source"
-DEFAULT_CUSTOM_THEME_SOURCE = settings_store.DEFAULTS[CUSTOM_THEME_SOURCE_KEY]
+INSTALLED_THEMES_KEY = "installed_themes"
+DEFAULT_INSTALLED_THEMES = settings_store.DEFAULTS[INSTALLED_THEMES_KEY]
 
 _SETTINGS_CACHE_KEY = "_settings_cache"
 
@@ -145,31 +142,78 @@ def set_widget_enabled(page: ft.Page, widget_id: str, enabled: bool) -> None:
     settings_store.save(current)
 
 
-def get_custom_theme(page: ft.Page) -> Optional[dict]:
-    return _get_settings(page).get(CUSTOM_THEME_KEY, DEFAULT_CUSTOM_THEME)
+def get_installed_themes(page: ft.Page) -> list[dict]:
+    """All installed themes, each a dict with at least "id" and "name"."""
+    return _get_settings(page).get(INSTALLED_THEMES_KEY, DEFAULT_INSTALLED_THEMES)
 
 
-def get_custom_theme_source(page: ft.Page) -> str:
-    return _get_settings(page).get(CUSTOM_THEME_SOURCE_KEY, DEFAULT_CUSTOM_THEME_SOURCE)
+def get_theme_by_id(page: ft.Page, theme_id: str) -> Optional[dict]:
+    return next((t for t in get_installed_themes(page) if t.get("id") == theme_id), None)
 
 
-def set_custom_theme(page: ft.Page, theme: Optional[dict], source: str) -> None:
-    """Save a parsed custom theme, along with the raw input it came from.
+def _unique_theme_id(page: ft.Page, name: str) -> str:
+    """A slug id for name, deduped against already-installed theme ids."""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-") or "theme"
+    existing_ids = {t.get("id") for t in get_installed_themes(page)}
+    candidate = slug
+    suffix = 2
+    while candidate in existing_ids:
+        candidate = f"{slug}-{suffix}"
+        suffix += 1
+    return candidate
 
-    The raw source is kept only so Settings can show back what's active.
-    theme is what actually gets applied, via multitool.theme.build_theme.
+
+def install_theme(page: ft.Page, theme: dict, source: str) -> str:
+    """Add a newly parsed theme to the installed list and return its id.
+
+    theme's "name" field is what the theme is displayed as, and what its
+    id is derived from. The raw source is kept only so Settings can show
+    back what was pasted. theme is what actually gets applied, via
+    multitool.theme.build_theme.
     """
     current = _get_settings(page)
-    current[CUSTOM_THEME_KEY] = theme
-    current[CUSTOM_THEME_SOURCE_KEY] = source
+    themes = list(current.get(INSTALLED_THEMES_KEY, DEFAULT_INSTALLED_THEMES))
+    theme_id = _unique_theme_id(page, theme["name"])
+    themes.append({"id": theme_id, "source": source, **theme})
+    current[INSTALLED_THEMES_KEY] = themes
+    page.session.store.set(_SETTINGS_CACHE_KEY, current)
+    settings_store.save(current)
+    return theme_id
+
+
+def remove_theme(page: ft.Page, theme_id: str) -> None:
+    """Uninstall a theme. Falls back to System if it was the active one."""
+    current = _get_settings(page)
+    themes = [t for t in current.get(INSTALLED_THEMES_KEY, DEFAULT_INSTALLED_THEMES)
+              if t.get("id") != theme_id]
+    current[INSTALLED_THEMES_KEY] = themes
+    if current.get(THEME_MODE_KEY) == theme_id:
+        current[THEME_MODE_KEY] = "system"
     page.session.store.set(_SETTINGS_CACHE_KEY, current)
     settings_store.save(current)
 
 
-def is_custom_theme_active(page: ft.Page) -> bool:
-    """Whether "Custom" is the selected appearance and a theme is saved.
-
-    A saved custom theme stays on disk even while System, Light, or Dark
-    is selected. It only takes effect when the mode is actually "custom".
+def get_active_theme(page: ft.Page) -> Optional[dict]:
+    """The installed theme currently selected in Appearance, or None if
+    System, Light, or Dark is selected instead.
     """
-    return get_theme_mode(page) == "custom" and get_custom_theme(page) is not None
+    mode = get_theme_mode(page)
+    if mode in BUILT_IN_THEME_MODES:
+        return None
+    return get_theme_by_id(page, mode)
+
+
+def is_named_theme_active(page: ft.Page) -> bool:
+    return get_active_theme(page) is not None
+
+
+def resolve_theme_mode(page: ft.Page) -> ft.ThemeMode:
+    """The ft.ThemeMode to render at, given the current Appearance choice.
+
+    System/Light/Dark map directly. An installed theme renders at System
+    brightness, unless it sets its own "brightness" field.
+    """
+    mode = get_theme_mode(page)
+    if mode in BUILT_IN_THEME_MODES:
+        return BUILT_IN_THEME_MODES[mode]
+    return theme_brightness_mode(get_active_theme(page)) or ft.ThemeMode.SYSTEM

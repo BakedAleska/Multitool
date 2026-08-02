@@ -19,9 +19,28 @@ DEFAULTS = {
     "compact_mode": False,
     "place_id": "",
     "disabled_widgets": [],
-    "custom_theme": None,
-    "custom_theme_source": "",
+    "installed_themes": [],
 }
+
+
+def _migrate_legacy_custom_theme(data: dict) -> dict:
+    """Fold a pre-multi-theme single ``custom_theme`` into ``installed_themes``.
+
+    Older settings files stored one theme directly as ``custom_theme`` /
+    ``custom_theme_source``, selected via ``theme_mode: "custom"``. This
+    converts that into a single installed theme named "Custom" with id
+    "custom", so upgrading doesn't drop a saved theme.
+    """
+    legacy_theme = data.pop("custom_theme", None)
+    legacy_source = data.pop("custom_theme_source", "")
+    if not legacy_theme:
+        return data
+
+    if not any(t.get("id") == "custom" for t in data.get("installed_themes", [])):
+        data.setdefault("installed_themes", []).append(
+            {"id": "custom", "name": "Custom", "source": legacy_source, **legacy_theme}
+        )
+    return data
 
 
 def load() -> dict:
@@ -33,7 +52,8 @@ def load() -> dict:
         return DEFAULTS.copy()
 
     try:
-        return {**DEFAULTS, **json.loads(SETTINGS_FILE.read_text())}
+        data = {**DEFAULTS, **json.loads(SETTINGS_FILE.read_text())}
+        return _migrate_legacy_custom_theme(data)
     except (json.JSONDecodeError, OSError) as e:
         logger.error("Couldn't read %s, falling back to defaults: %s", SETTINGS_FILE, e)
         return DEFAULTS.copy()

@@ -2,7 +2,7 @@
 
 import flet as ft
 
-from multitool.state import get_custom_theme, get_nav_position, is_custom_theme_active
+from multitool.state import get_active_theme, get_nav_position, is_named_theme_active
 from multitool.theme import BACKGROUND_FIT_MAP
 from multitool.ui.style import radius_card
 from multitool.widgets.loader import get_enabled_widgets
@@ -111,11 +111,11 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
 
 
 def _background_image(page: ft.Page) -> ft.Control | None:
-    """The active custom theme's background image, or None if it has none."""
-    if not is_custom_theme_active(page):
+    """The active theme's background image, or None if it has none."""
+    if not is_named_theme_active(page):
         return None
 
-    theme = get_custom_theme(page)
+    theme = get_active_theme(page)
     src = theme.get("background_image") if theme else None
     if not src:
         return None

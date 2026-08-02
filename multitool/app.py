@@ -13,12 +13,7 @@ sys.dont_write_bytecode = True
 import flet as ft  # noqa: E402
 
 from multitool.logs import get_logger  # noqa: E402
-from multitool.state import (  # noqa: E402
-    THEME_MODE_MAP,
-    get_custom_theme,
-    get_theme_mode,
-    is_custom_theme_active,
-)
+from multitool.state import get_active_theme, resolve_theme_mode  # noqa: E402
 from multitool.theme import build_theme  # noqa: E402
 from multitool.ui.accounts import AccountsView  # noqa: E402
 from multitool.ui.dashboard import DashboardView  # noqa: E402
@@ -35,9 +30,9 @@ def main(page: ft.Page):
     def handle_loop_exception(loop, context):
         """Log exceptions raised by `page.run_task`-scheduled background work.
 
-        `page.run_task` surfaces a background task's exception via a
-        done-callback that re-raises it, which routes here rather than
-        crashing anything visibly. Without this handler, a bug in a
+        `page.run_task` surfaces a background task's exception by
+        re-raising it inside a done-callback, which routes here rather
+        than crashing anything visibly. Without this handler, a bug in a
         background task (e.g. a Catalogue refresh) fails completely
         silently.
         """
@@ -48,8 +43,8 @@ def main(page: ft.Page):
     page.session.connection.loop.set_exception_handler(handle_loop_exception)
 
     page.title = "Multitool"
-    page.theme_mode = THEME_MODE_MAP[get_theme_mode(page)]
-    page.theme = build_theme(get_custom_theme(page) if is_custom_theme_active(page) else None)
+    page.theme_mode = resolve_theme_mode(page)
+    page.theme = build_theme(get_active_theme(page))
     page.window.width = 900
     page.window.height = 500
     page.window.resizable = True

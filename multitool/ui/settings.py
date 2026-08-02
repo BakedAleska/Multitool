@@ -7,17 +7,19 @@ import flet as ft
 from multitool.config import WIDGETS_DIR
 from multitool.roblox.join import extract_place_id
 from multitool.state import (
-    THEME_MODE_MAP,
+    BUILT_IN_THEME_MODES,
+    get_active_theme,
     get_compact_mode,
-    get_custom_theme,
-    get_custom_theme_source,
+    get_installed_themes,
     get_nav_position,
     get_place_id,
     get_show_avatars,
     get_sort_order,
     get_theme_mode,
+    install_theme,
+    remove_theme,
+    resolve_theme_mode,
     set_compact_mode,
-    set_custom_theme,
     set_nav_position,
     set_place_id,
     set_show_avatars,
@@ -43,12 +45,11 @@ def SettingsView(page: ft.Page) -> ft.View:
         page.update()
 
     def on_theme_mode_change(e: ft.Event[ft.RadioGroup]):
-        """Switch between System, Light, Dark, and a saved Custom theme."""
+        """Switch Appearance between System, Light, Dark, or an installed theme."""
         if e.control.value is not None:
-            mode = e.control.value
-            set_theme_mode(page, mode)
-            page.theme_mode = THEME_MODE_MAP[mode]
-            page.theme = build_theme(get_custom_theme(page) if mode == "custom" else None)
+            set_theme_mode(page, e.control.value)
+            page.theme_mode = resolve_theme_mode(page)
+            page.theme = build_theme(get_active_theme(page))
         page.views[-1] = SettingsView(page)
         page.update()
 
@@ -80,16 +81,16 @@ def SettingsView(page: ft.Page) -> ft.View:
         await page.clipboard.set(str(WIDGETS_DIR))
         show_toast(page, "Copied.")
 
-    async def on_apply_theme(e: ft.Event[ft.FilledButton]):
-        """Parse the pasted theme or link, save it, and select Custom.
+    async def on_install_theme(e: ft.Event[ft.FilledButton]):
+        """Parse the pasted theme or link and install it, using its "name"
+        field, as the active appearance.
 
-        Applying a theme also switches Appearance to Custom, since
-        pasting one and applying it means the user wants to see it now.
+        Installing a theme also switches Appearance to it, since pasting
+        one and installing it means the user wants to see it now.
         """
         raw_input = (theme_field.value or "").strip()
         if not raw_input:
-            _reset_theme()
-            show_toast(page, "Theme cleared.")
+            show_toast(page, "Paste a theme's JSON, or a link to one, before installing.")
             return
 
         theme, error = await asyncio.to_thread(parse_theme_input, raw_input)
@@ -97,31 +98,32 @@ def SettingsView(page: ft.Page) -> ft.View:
             show_toast(page, error)
             return
 
-        set_custom_theme(page, theme, raw_input)
-        set_theme_mode(page, "custom")
-        page.theme_mode = THEME_MODE_MAP["custom"]
+        theme_id = install_theme(page, theme, raw_input)
+        set_theme_mode(page, theme_id)
+        page.theme_mode = resolve_theme_mode(page)
         page.theme = build_theme(theme)
         page.views[-1] = SettingsView(page)
         page.update()
-        show_toast(page, "Theme applied.")
+        show_toast(page, f'"{theme["name"]}" installed and applied.')
 
-    def on_clear_theme(e: ft.Event[ft.TextButton]):
-        """Remove the saved theme and go back to the default look."""
-        _reset_theme()
+    def on_remove_theme(theme_id: str):
+        def handler(e: ft.Event[ft.IconButton]):
+            was_active = get_theme_mode(page) == theme_id
+            remove_theme(page, theme_id)
+            if was_active:
+                page.theme_mode = resolve_theme_mode(page)
+                page.theme = build_theme(None)
+            page.views[-1] = SettingsView(page)
+            page.update()
+            show_toast(page, "Theme removed.")
 
-    def _reset_theme():
-        """Clear the saved theme and fall back to System appearance."""
-        set_custom_theme(page, None, "")
-        set_theme_mode(page, "system")
-        page.theme_mode = THEME_MODE_MAP["system"]
-        page.theme = build_theme(None)
-        page.views[-1] = SettingsView(page)
-        page.update()
+        return handler
 
     theme_field = ft.TextField(
-        value=get_custom_theme_source(page),
         hint_text=(
-            '{"accent_color": "#7C3AED", "corner_radius": 4, '
+            '{"name": "Seafoam", "accent_color": "#7C3AED", '
+            '"secondary_color": "#22D3AA", "corner_radius": 4, '
+            '"brightness": "dark", '
             '"background_image": "https://example.com/bg.png", '
             '"background_opacity": 0.4}'
         ),
@@ -131,16 +133,38 @@ def SettingsView(page: ft.Page) -> ft.View:
         multiline=True,
         min_lines=2,
         max_lines=6,
-        width=320,
+        expand=True,
     )
+
+    installed_themes = get_installed_themes(page)
 
     appearance_options = [
         ft.Radio(value="system", label="System"),
         ft.Radio(value="light", label="Light"),
         ft.Radio(value="dark", label="Dark"),
     ]
-    if get_custom_theme(page) is not None:
-        appearance_options.append(ft.Radio(value="custom", label="Custom"))
+    for theme in installed_themes:
+        appearance_options.append(ft.Radio(value=theme["id"], label=theme["name"]))
+
+    installed_theme_rows: list[ft.Control] = []
+    for theme in installed_themes:
+        installed_theme_rows.append(
+            ft.Row(
+                [
+                    ft.Text(theme["name"], expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE_OUTLINE,
+                        icon_size=18,
+                        tooltip=f'Remove "{theme["name"]}"',
+                        on_click=on_remove_theme(theme["id"]),
+                    ),
+                ]
+            )
+        )
+
+    valid_appearance_values = BUILT_IN_THEME_MODES.keys() | {t["id"] for t in installed_themes}
+    appearance_value = get_theme_mode(page) if get_theme_mode(page) in valid_appearance_values \
+        else "system"
 
     general_tab = ft.Column(
         [
@@ -157,25 +181,28 @@ def SettingsView(page: ft.Page) -> ft.View:
             ),
             ft.Text("Appearance", weight=ft.FontWeight.W_500),
             ft.RadioGroup(
-                value=get_theme_mode(page),
+                value=appearance_value,
                 on_change=on_theme_mode_change,
                 content=ft.Row(appearance_options, wrap=True),
             ),
-            ft.Text("Custom Theme", weight=ft.FontWeight.W_500),
+            *(
+                [
+                    ft.Text("Installed Themes", weight=ft.FontWeight.W_500),
+                    ft.Column(installed_theme_rows, spacing=4),
+                ]
+                if installed_theme_rows
+                else []
+            ),
+            ft.Text("Install a Theme", weight=ft.FontWeight.W_500),
             ft.Text(
-                "Paste a theme's JSON, or a link to one, to set an accent color, "
-                "corner rounding, a font, and a background image. Applying a "
-                "theme selects Custom above. Leave it blank to clear it.",
+                "Paste a theme's JSON, or a link to one, to set a name, colors, "
+                "corner rounding, a font, and a background image. Installing "
+                "adds it to Appearance above.",
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
             theme_field,
-            ft.Row(
-                [
-                    ft.FilledButton("Apply", on_click=on_apply_theme),
-                    ft.TextButton("Clear", on_click=on_clear_theme),
-                ]
-            ),
+            ft.FilledButton("Install", on_click=on_install_theme),
         ],
         spacing=12,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
@@ -277,7 +304,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                 ]
             ),
         ],
-        spacing=8,
+        spacing=16,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         scroll=ft.ScrollMode.AUTO,
     )

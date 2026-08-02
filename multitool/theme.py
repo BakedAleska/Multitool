@@ -1,11 +1,24 @@
-"""Parse and apply a user-supplied custom theme.
+"""Parse and apply a user-supplied theme.
 
 A theme is a small JSON object, either pasted directly into Settings or
-fetched from a link, for example a raw GitHub URL. Recognized fields:
+fetched from a link, for example a raw GitHub URL. A user can install
+several themes at once and switch between them (or System / Light /
+Dark) from Settings. Recognized fields:
 
+- "name": the theme's display name, shown in Appearance and the
+  Installed Themes list. Required.
 - "accent_color": a hex string, such as "#7C3AED".
+- "secondary_color": a hex string for secondary accents (buttons,
+  highlights that aren't the primary accent).
+- "background_color": a hex string used as the page's solid background.
+- "card_color": a hex string used as the background of cards and
+  bordered containers.
+- "divider_color": a hex string used for dividers and outlines.
 - "corner_radius": a non-negative number.
 - "font_family": a font name already available on the system.
+- "brightness": "light" or "dark". Forces the app to render at that
+  brightness while this theme is active, instead of following System
+  Light/Dark.
 - "background_image": a URL or a local file path.
 - "background_fit": how the image fills the window. One of "cover",
   "contain", "fill", or "none". Defaults to "cover".
@@ -38,6 +51,11 @@ BACKGROUND_FIT_MAP = {
     "none": ft.BoxFit.NONE,
 }
 
+BRIGHTNESS_MAP = {
+    "light": ft.ThemeMode.LIGHT,
+    "dark": ft.ThemeMode.DARK,
+}
+
 
 def _looks_like_url(text: str) -> bool:
     return text.startswith(("http://", "https://"))
@@ -47,9 +65,15 @@ def _validate(raw: dict) -> dict:
     """Keep only the known, well-formed fields from a raw theme dict."""
     theme = {}
 
-    accent_color = raw.get("accent_color")
-    if isinstance(accent_color, str) and _HEX_COLOR_PATTERN.match(accent_color):
-        theme["accent_color"] = accent_color
+    name = raw.get("name")
+    if isinstance(name, str) and name.strip():
+        theme["name"] = name.strip()
+
+    for key in ("accent_color", "secondary_color", "background_color", "card_color",
+                "divider_color"):
+        value = raw.get(key)
+        if isinstance(value, str) and _HEX_COLOR_PATTERN.match(value):
+            theme[key] = value
 
     corner_radius = raw.get("corner_radius")
     if isinstance(corner_radius, (int, float)) and corner_radius >= 0:
@@ -58,6 +82,10 @@ def _validate(raw: dict) -> dict:
     font_family = raw.get("font_family")
     if isinstance(font_family, str) and font_family.strip():
         theme["font_family"] = font_family.strip()
+
+    brightness = raw.get("brightness")
+    if isinstance(brightness, str) and brightness.lower() in BRIGHTNESS_MAP:
+        theme["brightness"] = brightness.lower()
 
     background_image = raw.get("background_image")
     if isinstance(background_image, str) and background_image.strip():
@@ -107,18 +135,20 @@ def parse_theme_input(raw_input: str) -> tuple[Optional[dict], Optional[str]]:
         return None, "The pasted theme isn't a JSON object. Did you paste the right file?"
 
     theme = _validate(data)
-    if not theme:
+    if "name" not in theme:
+        return None, 'The theme is missing a "name" field. What should it be called?'
+    if len(theme) == 1:
         return None, "None of the theme's fields were recognized. Did you use the right key names?"
 
     return theme, None
 
 
-def build_theme(custom_theme: Optional[dict]) -> ft.Theme:
-    """Build the app's Theme, applying a custom theme's overrides if any.
+def build_theme(theme: Optional[dict]) -> ft.Theme:
+    """Build the app's Theme, applying an installed theme's overrides if any.
 
-    Page transitions are always disabled, regardless of any custom
-    theme: instant view switches are a deliberate choice for this app,
-    not something a theme should be able to turn back on.
+    Page transitions are always disabled, regardless of any theme:
+    instant view switches are a deliberate choice for this app, not
+    something a theme should be able to turn back on.
     """
     kwargs: dict = {
         "page_transitions": ft.PageTransitionsTheme(
@@ -130,10 +160,25 @@ def build_theme(custom_theme: Optional[dict]) -> ft.Theme:
         )
     }
 
-    if custom_theme:
-        if "accent_color" in custom_theme:
-            kwargs["color_scheme_seed"] = custom_theme["accent_color"]
-        if "font_family" in custom_theme:
-            kwargs["font_family"] = custom_theme["font_family"]
+    if theme:
+        if "accent_color" in theme:
+            kwargs["color_scheme_seed"] = theme["accent_color"]
+        if "secondary_color" in theme:
+            kwargs["color_scheme"] = ft.ColorScheme(secondary=theme["secondary_color"])
+        if "font_family" in theme:
+            kwargs["font_family"] = theme["font_family"]
+        if "background_color" in theme:
+            kwargs["scaffold_bgcolor"] = theme["background_color"]
+        if "card_color" in theme:
+            kwargs["card_bgcolor"] = theme["card_color"]
+        if "divider_color" in theme:
+            kwargs["divider_color"] = theme["divider_color"]
 
     return ft.Theme(**kwargs)
+
+
+def theme_brightness_mode(theme: Optional[dict]) -> Optional[ft.ThemeMode]:
+    """The ThemeMode a theme's "brightness" field forces, or None if unset."""
+    if not theme:
+        return None
+    return BRIGHTNESS_MAP.get(theme.get("brightness"))

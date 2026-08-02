@@ -4,7 +4,7 @@ container uses the same corner rounding and border style.
 
 import flet as ft
 
-from multitool.state import get_custom_theme, is_custom_theme_active
+from multitool.state import get_active_theme
 
 RADIUS_CARD = 12
 """Default radius for bordered cards and list items. Used by account
@@ -26,11 +26,10 @@ corner_radius.
 
 
 def radius_card(page: ft.Page) -> float:
-    """The card radius, using the active custom theme's corner_radius if set."""
-    if is_custom_theme_active(page):
-        theme = get_custom_theme(page)
-        if theme and "corner_radius" in theme:
-            return theme["corner_radius"]
+    """The card radius, using the active theme's corner_radius if set."""
+    theme = get_active_theme(page)
+    if theme and "corner_radius" in theme:
+        return theme["corner_radius"]
     return RADIUS_CARD
 
 
