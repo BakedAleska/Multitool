@@ -16,6 +16,22 @@
       },
       "sha256": "ece8e0d4576611e0eb8ac2145e54af3d66626f61a05b5883092606a2bc0e2b16",
       "homepage": "https://github.com/BakedAleska/Multitool/tree/main/widgets/autoclicker"
+    },
+    {
+      "id": "image_overlay",
+      "name": "Image Overlay",
+      "description": "Pins an image on top of everything else on screen.",
+      "author": "BakedAleska",
+      "version": "1.0.0",
+      "icon": null,
+      "source": {
+        "owner": "BakedAleska",
+        "repo": "Multitool",
+        "ref": "011809e7cf95add9b556804336f5058fc17f772b",
+        "path": "widgets/image_overlay"
+      },
+      "sha256": "b94f97011db8e44e94003b001a2fdc2a7b8fb48d311a795fc34d95532c63cd3b",
+      "homepage": "https://github.com/BakedAleska/Multitool/tree/main/widgets/image_overlay"
     }
   ]
 }
