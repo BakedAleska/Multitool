@@ -128,6 +128,18 @@ def install_widget(entry: CatalogEntry) -> None:
             shutil.rmtree(staging_dir, ignore_errors=True)
 
 
+def uninstall_widget(widget_id: str) -> None:
+    """Remove an installed widget's folder from WIDGETS_DIR.
+
+    Blocking. Call this via asyncio.to_thread from UI code. A no-op if
+    the widget isn't installed.
+    """
+    target = WIDGETS_DIR / widget_id
+    if target.exists():
+        shutil.rmtree(target)
+        logger.info("Uninstalled widget '%s'", widget_id)
+
+
 def is_installing(page: ft.Page, widget_id: str) -> bool:
     """Whether an install is in progress for this widget id."""
     return widget_id in (page.session.store.get(_INSTALLING_KEY) or set())

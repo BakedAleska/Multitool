@@ -34,6 +34,7 @@ class CatalogEntry:
     author: str
     version: str
     icon: Optional[str]
+    logo: Optional[str]
     source: WidgetSource
     sha256: str
     homepage: str
@@ -67,6 +68,7 @@ def fetch_registry() -> tuple[list[CatalogEntry], Optional[str]]:
                     author=raw.get("author", ""),
                     version=raw.get("version", ""),
                     icon=raw.get("icon"),
+                    logo=raw.get("logo"),
                     source=WidgetSource(
                         owner=source_raw["owner"],
                         repo=source_raw["repo"],

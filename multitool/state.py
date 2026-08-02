@@ -137,6 +137,11 @@ def get_disabled_widgets(page: ft.Page) -> list[str]:
 
 
 def set_widget_enabled(page: ft.Page, widget_id: str, enabled: bool) -> None:
+    """Add or remove a widget id from the disabled_widgets list.
+
+    Enabled widgets are simply absent from the list; there's no
+    separate "enabled" list to keep in sync.
+    """
     current = _get_settings(page)
     disabled = list(current.get(DISABLED_WIDGETS_KEY, DEFAULT_DISABLED_WIDGETS))
     if enabled and widget_id in disabled:
@@ -144,6 +149,27 @@ def set_widget_enabled(page: ft.Page, widget_id: str, enabled: bool) -> None:
     elif not enabled and widget_id not in disabled:
         disabled.append(widget_id)
     current[DISABLED_WIDGETS_KEY] = disabled
+    page.session.store.set(_SETTINGS_CACHE_KEY, current)
+    settings_store.save(current)
+
+
+def remove_widget_settings(page: ft.Page, widget_id: str) -> None:
+    """Discard a widget's disabled-state entry and stored settings.
+
+    Call this after uninstalling a widget, so a reinstall starts clean
+    instead of inheriting stale settings from before.
+    """
+    current = _get_settings(page)
+    disabled = [
+        w for w in current.get(DISABLED_WIDGETS_KEY, DEFAULT_DISABLED_WIDGETS) if w != widget_id
+    ]
+    widget_settings = {
+        k: v
+        for k, v in current.get(WIDGET_SETTINGS_KEY, DEFAULT_WIDGET_SETTINGS).items()
+        if k != widget_id
+    }
+    current[DISABLED_WIDGETS_KEY] = disabled
+    current[WIDGET_SETTINGS_KEY] = widget_settings
     page.session.store.set(_SETTINGS_CACHE_KEY, current)
     settings_store.save(current)
 
