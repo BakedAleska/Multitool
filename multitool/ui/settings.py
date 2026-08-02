@@ -28,7 +28,11 @@ from multitool.state import (
 )
 from multitool.theme import build_theme, parse_theme_input
 from multitool.ui.layout import build_layout
+from multitool.ui.style import card_border, radius_card
 from multitool.ui.toast import show_toast
+from multitool.widgets.loader import discover_widgets
+
+_SETTINGS_FOCUS_WIDGET_KEY = "_settings_focus_widget_id"
 
 
 def SettingsView(page: ft.Page) -> ft.View:
@@ -283,6 +287,35 @@ def SettingsView(page: ft.Page) -> ft.View:
 
     WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
 
+    focus_widget_id = page.session.store.get(_SETTINGS_FOCUS_WIDGET_KEY)
+    if page.session.store.contains_key(_SETTINGS_FOCUS_WIDGET_KEY):
+        page.session.store.remove(_SETTINGS_FOCUS_WIDGET_KEY)
+
+    installed_widgets, _load_errors = discover_widgets()
+
+    widget_settings_sections: list[ft.Control] = []
+    for widget in installed_widgets:
+        if widget.build_settings is None:
+            continue
+        widget_settings_sections.append(
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(widget.name, size=16, weight=ft.FontWeight.W_600),
+                        widget.build_settings(page),
+                    ],
+                    spacing=12,
+                ),
+                padding=12,
+                border=(
+                    ft.Border.all(2, ft.Colors.PRIMARY)
+                    if widget.id == focus_widget_id
+                    else card_border()
+                ),
+                border_radius=radius_card(page),
+            )
+        )
+
     widgets_tab = ft.Column(
         [
             ft.Text(
@@ -303,6 +336,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                     ),
                 ]
             ),
+            *widget_settings_sections,
         ],
         spacing=16,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
@@ -314,6 +348,7 @@ def SettingsView(page: ft.Page) -> ft.View:
             ft.Text("Settings", size=24, weight=ft.FontWeight.BOLD),
             ft.Tabs(
                 length=3,
+                selected_index=2 if focus_widget_id else 0,
                 expand=True,
                 content=ft.Column(
                     expand=True,

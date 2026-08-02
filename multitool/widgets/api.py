@@ -56,6 +56,28 @@ class Widget:
     to the Dashboard. Called fresh on every Dashboard build, so tiles can
     reflect current state. Omit, or return [], to contribute nothing."""
 
+    description: str = ""
+    """Short, one-line description shown on the widget's square on the
+    Widgets screen and in its tooltip."""
+
+    logo: Optional[str] = None
+    """Optional image src (a path or URL) shown on the widget's square
+    instead of `icon`. Falls back to `icon` if not given."""
+
+    build_settings: Optional[Callable[[ft.Page], ft.Control]] = None
+    """Optional: given the page, return this widget's settings content.
+
+    If set, the widget gets its own titled section under Settings ->
+    Widgets, and a settings button appears on its square on the Widgets
+    screen that jumps straight there. Omit if the widget has no settings
+    of its own.
+
+    For a widget with enough settings that one flat section gets hard to
+    scan, return an `ft.Tabs` control here with `ft.TabBar(secondary=True,
+    ...)` instead of a plain Column. `secondary=True` gives a nested tab
+    bar styled to sit inside the outer Settings tabs, rather than looking
+    like a second top-level tab row."""
+
 
 def get_widget_data(account: dict, widget_id: str) -> dict:
     """Read this widget's namespaced data out of an account dict.

@@ -46,6 +46,9 @@ DEFAULT_DISABLED_WIDGETS = settings_store.DEFAULTS[DISABLED_WIDGETS_KEY]
 INSTALLED_THEMES_KEY = "installed_themes"
 DEFAULT_INSTALLED_THEMES = settings_store.DEFAULTS[INSTALLED_THEMES_KEY]
 
+WIDGET_SETTINGS_KEY = "widget_settings"
+DEFAULT_WIDGET_SETTINGS = settings_store.DEFAULTS[WIDGET_SETTINGS_KEY]
+
 _SETTINGS_CACHE_KEY = "_settings_cache"
 
 
@@ -138,6 +141,25 @@ def set_widget_enabled(page: ft.Page, widget_id: str, enabled: bool) -> None:
     elif not enabled and widget_id not in disabled:
         disabled.append(widget_id)
     current[DISABLED_WIDGETS_KEY] = disabled
+    page.session.store.set(_SETTINGS_CACHE_KEY, current)
+    settings_store.save(current)
+
+
+def get_widget_setting(page: ft.Page, widget_id: str, key: str, default=None):
+    """Read one persisted setting for a widget's own Settings section.
+
+    Namespaced per widget id so two widgets can use the same key name
+    without colliding.
+    """
+    widget_settings = _get_settings(page).get(WIDGET_SETTINGS_KEY, DEFAULT_WIDGET_SETTINGS)
+    return widget_settings.get(widget_id, {}).get(key, default)
+
+
+def set_widget_setting(page: ft.Page, widget_id: str, key: str, value) -> None:
+    current = _get_settings(page)
+    widget_settings = dict(current.get(WIDGET_SETTINGS_KEY, DEFAULT_WIDGET_SETTINGS))
+    widget_settings[widget_id] = {**widget_settings.get(widget_id, {}), key: value}
+    current[WIDGET_SETTINGS_KEY] = widget_settings
     page.session.store.set(_SETTINGS_CACHE_KEY, current)
     settings_store.save(current)
 

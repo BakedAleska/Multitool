@@ -20,6 +20,7 @@ DEFAULTS = {
     "place_id": "",
     "disabled_widgets": [],
     "installed_themes": [],
+    "widget_settings": {},
 }
 
 

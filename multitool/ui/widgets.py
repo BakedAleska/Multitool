@@ -25,6 +25,7 @@ from multitool.widgets.loader import discover_widgets
 
 _CATALOGUE_FETCHED_KEY = "_widget_catalogue_fetched"
 _CATALOGUE_ERROR_KEY = "_widget_catalogue_error"
+_SETTINGS_FOCUS_WIDGET_KEY = "_settings_focus_widget_id"
 
 
 def WidgetsView(page: ft.Page) -> ft.View:
@@ -48,6 +49,11 @@ def WidgetsView(page: ft.Page) -> ft.View:
         """Enable or disable one installed widget."""
         set_widget_enabled(page, widget_id, enable)
         refresh()
+
+    async def open_widget_settings(widget_id: str):
+        """Jump to Settings -> Widgets, focused on one widget's section."""
+        page.session.store.set(_SETTINGS_FOCUS_WIDGET_KEY, widget_id)
+        await page.push_route("/settings")
 
     async def on_install(entry: CatalogEntry):
         """Download and install one Catalogue entry."""
@@ -80,12 +86,28 @@ def WidgetsView(page: ft.Page) -> ft.View:
     local_ids = {w.id for w in widgets}
 
     def build_installed_square(widget) -> ft.Control:
-        """Build one installed widget's square. Click to toggle enabled."""
+        """Build one installed widget's square. Click to toggle enabled.
+
+        A widget with `build_settings` set gets a small settings button in
+        the corner that jumps to its section under Settings -> Widgets,
+        instead of opening settings embedded on this square.
+        """
         enabled = widget.id not in disabled_ids
-        return ft.Container(
+        status = "enabled" if enabled else "disabled"
+        tooltip = f"{widget.name}: {status}"
+        if widget.description:
+            tooltip = f"{widget.name} ({status}): {widget.description}"
+
+        logo = (
+            ft.Image(src=widget.logo, width=28, height=28, fit=ft.BoxFit.CONTAIN)
+            if widget.logo
+            else ft.Icon(widget.icon or ft.Icons.EXTENSION, size=28)
+        )
+
+        square = ft.Container(
             content=ft.Column(
                 [
-                    ft.Icon(widget.icon or ft.Icons.EXTENSION, size=28),
+                    logo,
                     ft.Text(
                         widget.name,
                         size=10,
@@ -103,9 +125,24 @@ def WidgetsView(page: ft.Page) -> ft.View:
             border=card_border(),
             border_radius=radius_card(page),
             opacity=1.0 if enabled else 0.4,
-            tooltip=f"{widget.name}: {'enabled' if enabled else 'disabled'}",
+            tooltip=tooltip,
             on_click=lambda e, wid=widget.id, was_on=enabled: on_toggle(wid, not was_on),
         )
+
+        if widget.build_settings is None:
+            return square
+
+        settings_button = ft.Container(
+            content=ft.IconButton(
+                icon=ft.Icons.SETTINGS,
+                icon_size=14,
+                tooltip=f"{widget.name} settings",
+                on_click=lambda e, wid=widget.id: page.run_task(open_widget_settings, wid),
+            ),
+            top=-4,
+            right=-4,
+        )
+        return ft.Stack([square, settings_button], width=76, height=76)
 
     def build_catalogue_square(entry: CatalogEntry) -> ft.Control:
         """Build one Catalogue entry's square. Click to install it."""
