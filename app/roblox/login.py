@@ -1,3 +1,14 @@
+"""Standalone Roblox login window, run as a subprocess.
+
+pywebview needs to own the main thread. Flet's own event loop already
+occupies the main thread in the parent process, so this module is
+launched separately with ``python -m app.roblox.login`` (see
+app/ui/accounts.py) instead of being embedded in the main app.
+
+IPC with the parent process is a single JSON line on stdout. This
+process never prints anything else.
+"""
+
 import json
 import time
 from typing import Optional
@@ -7,10 +18,6 @@ import webview
 
 from app.logs import get_logger
 
-# Never print() anything other than the final JSON line below — stdout is
-# a strict single-line IPC protocol read by app/ui/accounts.py. Logging is
-# safe here regardless (app.logs only ever writes to a file), but keep this
-# in mind before adding any other diagnostics to this file.
 logger = get_logger(__name__)
 
 LOGIN_URL = "https://www.roblox.com/login"
@@ -22,6 +29,11 @@ POLL_INTERVAL_SECONDS = 1.0
 
 
 def get_security_cookie(window: "webview.Window") -> Optional[str]:
+    """Read the Roblox session cookie via pywebview's native cookie jar.
+
+    Not `window.evaluate_js()`. Roblox's CSP blocks `unsafe-eval`, so
+    JS injection silently fails on roblox.com pages.
+    """
     for cookie in window.get_cookies():
         if SECURITY_COOKIE_NAME in cookie:
             return cookie[SECURITY_COOKIE_NAME].value
@@ -29,6 +41,7 @@ def get_security_cookie(window: "webview.Window") -> Optional[str]:
 
 
 def get_avatar_url(user_id: int) -> Optional[str]:
+    """Fetch a user's avatar headshot URL. Returns None on any failure."""
     try:
         response = httpx.get(
             THUMBNAIL_URL,
@@ -49,6 +62,11 @@ def get_avatar_url(user_id: int) -> Optional[str]:
 
 
 def poll_for_login(window: "webview.Window"):
+    """Poll the login window for a session cookie until one appears.
+
+    Once found and validated, prints the resulting account as a single
+    JSON line to stdout and closes the window.
+    """
     while not window.events.closed.is_set():
         time.sleep(POLL_INTERVAL_SECONDS)
 
@@ -91,6 +109,7 @@ def poll_for_login(window: "webview.Window"):
 
 
 def main():
+    """Open the Roblox login window and block until a session is captured."""
     window = webview.create_window("Sign in to Roblox", LOGIN_URL, width=480, height=640)
     webview.start(poll_for_login, (window,))
 

@@ -1,3 +1,5 @@
+"""Fetch and cache the Catalogue: the list of widgets available to install."""
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -14,6 +16,8 @@ _REGISTRY_CACHE_KEY = "_widget_catalog_cache"
 
 @dataclass
 class WidgetSource:
+    """Where one Catalogue entry's code lives, pinned to an exact commit."""
+
     owner: str
     repo: str
     ref: str
@@ -22,6 +26,8 @@ class WidgetSource:
 
 @dataclass
 class CatalogEntry:
+    """One widget listed in the Catalogue, as read from registry.json."""
+
     id: str
     name: str
     description: str
@@ -34,12 +40,12 @@ class CatalogEntry:
 
 
 def fetch_registry() -> tuple[list[CatalogEntry], Optional[str]]:
-    """Fetch and parse the widget shop catalog.
+    """Fetch and parse the widget Catalogue.
 
-    Never raises — returns ([], error_message) on any failure, mirroring
-    app.widgets.loader.discover_widgets()'s (list, errors) convention.
-    Malformed individual entries are skipped rather than failing the whole
-    fetch.
+    Never raises. Returns ([], error_message) on any failure, following
+    the same (list, errors) convention as
+    app.widgets.loader.discover_widgets(). A malformed entry is skipped
+    rather than failing the whole fetch.
     """
     try:
         response = httpx.get(WIDGET_REGISTRY_URL, timeout=15)
@@ -79,8 +85,10 @@ def fetch_registry() -> tuple[list[CatalogEntry], Optional[str]]:
 
 
 def get_cached_registry(page: ft.Page) -> list[CatalogEntry]:
+    """The Catalogue entries cached for this page, or an empty list."""
     return page.session.store.get(_REGISTRY_CACHE_KEY) or []
 
 
 def set_cached_registry(page: ft.Page, entries: list[CatalogEntry]) -> None:
+    """Cache the Catalogue entries for this page."""
     page.session.store.set(_REGISTRY_CACHE_KEY, entries)

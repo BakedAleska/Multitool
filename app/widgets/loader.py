@@ -1,3 +1,5 @@
+"""Discover and import installed widgets from WIDGETS_DIR."""
+
 import importlib
 import sys
 
@@ -14,14 +16,13 @@ logger = get_logger(__name__)
 def discover_widgets() -> tuple[list[Widget], list[tuple[str, str]]]:
     """Scan WIDGETS_DIR for widget folders and import each one fresh.
 
-    Each subfolder of WIDGETS_DIR containing a widget.py is treated as a
-    package (so widget code can freely split into multiple files and use
-    relative imports, e.g. `from . import constants`).
+    Each subfolder containing a widget.py is treated as a package, so
+    widget code can split into multiple files and use relative imports.
 
     Returns (widgets, errors). errors is a list of
     (folder_name, error_message) for anything that failed to import or
-    doesn't expose a WIDGET variable — a broken widget is skipped, not
-    fatal to the rest of the app.
+    has no WIDGET variable. A broken widget is skipped, not fatal to the
+    rest of the app.
     """
     widgets: list[Widget] = []
     errors: list[tuple[str, str]] = []

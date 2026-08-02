@@ -1,3 +1,5 @@
+"""Download, verify, and install a widget from the Catalogue."""
+
 import hashlib
 import io
 import shutil
@@ -23,13 +25,15 @@ class WidgetInstallError(Exception):
 
 
 def install_widget(entry: CatalogEntry) -> None:
-    """Download, verify, and extract a catalog entry into WIDGETS_DIR.
+    """Download, verify, and extract a Catalogue entry into WIDGETS_DIR.
 
-    Blocking/sync — call via asyncio.to_thread from UI code. Raises
-    WidgetInstallError with a user-facing message on any failure; never
-    leaves a partial/broken folder at WIDGETS_DIR/<id> (extraction happens
-    in a dot-prefixed staging dir that app.widgets.loader.discover_widgets()
-    already ignores, and is only moved into place after fully succeeding).
+    Blocking. Call this via asyncio.to_thread from UI code. Raises
+    WidgetInstallError with a user-facing message on any failure.
+
+    Extraction happens in a dot-prefixed staging directory, which
+    app.widgets.loader.discover_widgets() ignores. The staging directory
+    is only moved into place after the install fully succeeds, so a
+    failed install never leaves a broken folder at WIDGETS_DIR/<id>.
     """
     url = f"https://github.com/{entry.source.owner}/{entry.source.repo}/archive/{entry.source.ref}.zip"
 
@@ -42,12 +46,17 @@ def install_widget(entry: CatalogEntry) -> None:
                 total += len(chunk)
                 if total > MAX_DOWNLOAD_BYTES:
                     logger.warning("Install of '%s' aborted: exceeded size limit", entry.id)
-                    raise WidgetInstallError("Download exceeded the size limit.")
+                    raise WidgetInstallError(
+                        "The download exceeded the size limit. "
+                        "Did the registry point at the wrong repository?"
+                    )
                 chunks.append(chunk)
             data = b"".join(chunks)
     except httpx.HTTPError as e:
         logger.warning("Install of '%s' failed to download from %s: %s", entry.id, url, e)
-        raise WidgetInstallError(f"Couldn't download the widget: {e}") from e
+        raise WidgetInstallError(
+            f"Couldn't download the widget. Is your connection working? ({e})"
+        ) from e
 
     digest = hashlib.sha256(data).hexdigest()
     if digest != entry.sha256:
@@ -57,18 +66,25 @@ def install_widget(entry: CatalogEntry) -> None:
             entry.sha256,
             digest,
         )
-        raise WidgetInstallError("Downloaded file didn't match the expected checksum.")
+        raise WidgetInstallError(
+            "The downloaded file didn't match the expected checksum. "
+            "Did the widget's source change after it was listed?"
+        )
 
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as e:
         logger.warning("Install of '%s' got an invalid archive: %s", entry.id, e)
-        raise WidgetInstallError(f"Downloaded file wasn't a valid archive: {e}") from e
+        raise WidgetInstallError(
+            f"The downloaded file wasn't a valid archive. Did the download get interrupted? ({e})"
+        ) from e
 
     names = archive.namelist()
     if not names:
         logger.warning("Install of '%s' got an empty archive", entry.id)
-        raise WidgetInstallError("Downloaded archive was empty.")
+        raise WidgetInstallError(
+            "The downloaded archive was empty. Is the repository empty at that reference?"
+        )
 
     top_level = names[0].split("/", 1)[0]
     path = entry.source.path.strip("/")
@@ -77,7 +93,10 @@ def install_widget(entry: CatalogEntry) -> None:
     members = [n for n in names if n.startswith(prefix) and n != prefix]
     if not members:
         logger.warning("Install of '%s' found nothing at path '%s' in archive", entry.id, path)
-        raise WidgetInstallError(f"Archive had nothing at '{entry.source.path}'.")
+        raise WidgetInstallError(
+            f"The archive had nothing at '{entry.source.path}'. "
+            "Did the widget move to a different path?"
+        )
 
     WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
     staging_dir = WIDGETS_DIR / f".tmp_{entry.id}_{uuid.uuid4().hex}"
@@ -95,7 +114,9 @@ def install_widget(entry: CatalogEntry) -> None:
 
         if not (staging_dir / "widget.py").exists():
             logger.warning("Install of '%s' has no widget.py at its root", entry.id)
-            raise WidgetInstallError("Downloaded widget has no widget.py.")
+            raise WidgetInstallError(
+                "The downloaded widget has no widget.py. Is this the correct folder for it?"
+            )
 
         final_dir = WIDGETS_DIR / entry.id
         if final_dir.exists():
@@ -108,16 +129,19 @@ def install_widget(entry: CatalogEntry) -> None:
 
 
 def is_installing(page: ft.Page, widget_id: str) -> bool:
+    """Whether an install is in progress for this widget id."""
     return widget_id in (page.session.store.get(_INSTALLING_KEY) or set())
 
 
 def mark_installing(page: ft.Page, widget_id: str) -> None:
+    """Mark a widget id as installing, for is_installing() to see."""
     installing = set(page.session.store.get(_INSTALLING_KEY) or set())
     installing.add(widget_id)
     page.session.store.set(_INSTALLING_KEY, installing)
 
 
 def unmark_installing(page: ft.Page, widget_id: str) -> None:
+    """Clear the installing mark for a widget id."""
     installing = set(page.session.store.get(_INSTALLING_KEY) or set())
     installing.discard(widget_id)
     page.session.store.set(_INSTALLING_KEY, installing)

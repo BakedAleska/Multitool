@@ -1,3 +1,9 @@
+"""Per-OS data directory and shared URLs.
+
+Windows uses %LOCALAPPDATA%, macOS uses ~/Library/Application Support,
+and other platforms follow the XDG base directory spec.
+"""
+
 import os
 import sys
 from pathlib import Path
