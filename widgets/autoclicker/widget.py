@@ -554,13 +554,6 @@ def build_view(page: ft.Page) -> ft.View:
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
-            ft.Text(
-                "Using this in Rogue Lineage risks the account it's running "
-                "on. Roblox and Rogue Lineage both take automation seriously, "
-                "especially in combat.",
-                size=12,
-                color=ft.Colors.ERROR,
-            ),
             ft.Row([cps_field, button_group]),
             ft.Row([indicator_checkbox, randomize_checkbox]),
             ft.Row([start_button, stop_button]),

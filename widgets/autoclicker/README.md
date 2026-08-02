@@ -41,12 +41,6 @@ pattern instead of a platform script:
   macOS it's topmost but not click-through, tkinter has no equivalent
   there.
 
-## Ban risk
-
-Roblox's ToS and Rogue Lineage's own community norms are strict about
-automation, particularly anything touching combat. Using this widget in
-Rogue Lineage risks the account it's running on.
-
 ## Trying it locally
 
 Copy this `autoclicker` folder into the widgets folder shown in

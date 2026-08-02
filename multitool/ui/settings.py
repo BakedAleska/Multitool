@@ -257,12 +257,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                                                         "already open, so more than one account "
                                                         "can play at once. This works by bypassing "
                                                         "a check Roblox uses to stop multiple "
-                                                        "instances from running. It's not "
-                                                        "something Roblox intends to be possible, "
-                                                        "and using "
-                                                        "it, especially in games with strict rules "
-                                                        "against automation or multi-accounting, "
-                                                        "risks the accounts involved.",
+                                                        "instances from running.",
                                                         size=12,
                                                         color=ft.Colors.ON_SURFACE_VARIANT,
                                                     ),
