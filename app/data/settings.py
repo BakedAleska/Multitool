@@ -1,3 +1,7 @@
+"""Persistence for app settings, as a plain JSON dict at
+``<DATA_DIR>/settings.json``.
+"""
+
 import json
 
 from app.config import DATA_DIR
@@ -15,10 +19,16 @@ DEFAULTS = {
     "compact_mode": False,
     "place_id": "",
     "disabled_widgets": [],
+    "custom_theme": None,
+    "custom_theme_source": "",
 }
 
 
 def load() -> dict:
+    """Read settings from disk, merged over DEFAULTS.
+
+    Falls back to DEFAULTS if the file is missing or can't be parsed.
+    """
     if not SETTINGS_FILE.exists():
         return DEFAULTS.copy()
 
@@ -30,5 +40,6 @@ def load() -> dict:
 
 
 def save(settings: dict) -> None:
+    """Write the full settings dict to disk, replacing whatever was there."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
