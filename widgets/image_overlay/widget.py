@@ -11,15 +11,18 @@ Only PNG and GIF are supported. The backend uses tkinter's own image
 decoder rather than adding Pillow as a dependency, and tkinter can't
 decode JPEG on its own.
 
-Pressing Start doesn't show the image right away. It arms a background
-poll (multitool/roblox/detect.py::is_roblox_running) that starts the
-backend window only while a Roblox game client process exists, and stops
-it the moment Roblox closes, so the overlay never lingers on the desktop
-after the game it belongs to has closed.
+By default, pressing Start doesn't show the image right away. It arms a
+background poll (multitool/roblox/detect.py::is_roblox_running) that
+starts the backend window only while Roblox is running, and stops it the
+moment Roblox closes, so the overlay never lingers on the desktop after
+the game it belongs to has closed. Settings can point that same poll at
+a different app instead, or turn watching off entirely so the image
+shows immediately on Start and stays up until Stop.
 """
 
 import asyncio
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
@@ -34,6 +37,7 @@ from multitool.widgets.process import WidgetProcess, start_process, stop_process
 
 BACKEND_SCRIPT = Path(__file__).parent / "backend" / "overlay_image.py"
 AREA_PICKER_SCRIPT = Path(__file__).parent / "backend" / "area_picker.py"
+PICK_APP_SCRIPT = Path(__file__).parent / "backend" / "pick_app.py"
 
 WIDGET_ID = "image_overlay"
 _PROCESS_KEY = f"_{WIDGET_ID}_process"
@@ -41,7 +45,76 @@ _POLL_STATE_KEY = f"_{WIDGET_ID}_poll_state"
 
 DEFAULT_AREA = {"x": 100, "y": 100, "width": 300, "height": 300}
 DEFAULT_CLICK_THROUGH = True
+DEFAULT_WATCH_ENABLED = True
 POLL_INTERVAL_SECONDS = 3.0
+
+
+def _is_app_running(exe_path: str) -> bool:
+    """Return True if a process matching `exe_path`'s file name is running.
+
+    Same OS process-list shelling as `multitool.roblox.detect.is_roblox_running`,
+    generalized to an arbitrary executable so the overlay can watch for a
+    user-chosen app instead of only Roblox. Blocking; callers on the Flet
+    event loop should run it via `asyncio.to_thread`. Never raises; any
+    failure to read the process list is treated as "not running".
+    """
+    exe_name = Path(exe_path).name
+    if not exe_name:
+        return False
+    try:
+        if sys.platform == "win32":
+            result = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {exe_name}", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            return exe_name.lower() in result.stdout.lower()
+        if sys.platform == "darwin":
+            result = subprocess.run(
+                ["pgrep", "-x", Path(exe_name).stem],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return result.returncode == 0
+        return False
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+async def _is_watch_target_running(watch_app_path: str) -> bool:
+    """Whether the app the overlay is currently armed to watch for is running.
+
+    An empty `watch_app_path` means the default target, Roblox.
+    """
+    if watch_app_path:
+        return await asyncio.to_thread(_is_app_running, watch_app_path)
+    return await asyncio.to_thread(is_roblox_running)
+
+
+async def _pick_app_path() -> Optional[str]:
+    """Run backend/pick_app.py and return the app path it chose, or None
+    if the dialog was cancelled.
+
+    Same native-dialog-in-a-subprocess pattern as
+    widgets/ahk/widget.py::_pick_editor_path, for the same reason: tkinter
+    needs its own mainloop, which would conflict with Flet's.
+    """
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable, str(PICK_APP_SCRIPT), stdout=asyncio.subprocess.PIPE
+    )
+    assert proc.stdout is not None
+    line = await proc.stdout.readline()
+    await proc.wait()
+    if not line:
+        return None
+    try:
+        data = json.loads(line)
+    except ValueError:
+        return None
+    return data.get("path")
 
 
 def _backend_command(image_path: str, area: dict, click_through: bool) -> list[str]:
@@ -112,11 +185,14 @@ def _parse_area(x_field: ft.TextField, y_field: ft.TextField, w_field: ft.TextFi
 
 
 def build_view(page: ft.Page) -> ft.View:
-    """The Image Overlay's own screen: pick an image, place it, pin it."""
+    """The Image Overlay's own screen: pick an image, place it, pin it.
+
+    Click-through isn't a control here - it's Windows compositing
+    behavior, not something worth re-deciding per session, so it lives
+    only in Settings (build_settings) and is read fresh from there each
+    time Start runs.
+    """
     area = get_widget_setting(page, WIDGET_ID, "area", DEFAULT_AREA)
-    default_click_through = get_widget_setting(
-        page, WIDGET_ID, "default_click_through", DEFAULT_CLICK_THROUGH
-    )
 
     image_path_text = ft.Text("No image selected.", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
     status_text = ft.Text("Stopped", weight=ft.FontWeight.W_600)
@@ -126,28 +202,39 @@ def build_view(page: ft.Page) -> ft.View:
     width_field = ft.TextField(label="Width", value=str(area["width"]), width=90)
     height_field = ft.TextField(label="Height", value=str(area["height"]), width=90)
     pick_area_button = ft.OutlinedButton("Pick area on screen...")
-    click_through_checkbox = ft.Checkbox(
-        label="Click-through (Windows only)", value=default_click_through
+    pick_area_hint = ft.Text(
+        "Opens a full-screen picker. Click and drag to draw the area, then "
+        "press Enter to save it or Esc to leave the area unchanged.",
+        size=12,
+        color=ft.Colors.ON_SURFACE_VARIANT,
     )
-    start_button = ft.FilledButton("Start", disabled=True)
-    stop_button = ft.FilledButton("Stop", disabled=True)
+    revert_area_button = ft.TextButton(
+        "Revert",
+        icon=ft.Icons.UNDO,
+        visible=False,
+        tooltip="Restore the area from before your last change.",
+    )
+    start_button = ft.FilledButton("On", disabled=True)
+    stop_button = ft.FilledButton("Off", disabled=True)
 
     file_picker = ft.FilePicker()
+    watch_label = {"text": "Roblox"}
 
     def set_state(armed: bool, active: bool):
         """Reflect the current arm/active state in the status text and
         control disabled-states.
 
         `armed` means Start has been pressed and the poll loop is
-        watching for Roblox; `active` means Roblox is currently open and
-        the overlay window is actually showing. `active` implies `armed`.
+        watching for whichever app `watch_label` names; `active` means
+        that app is currently running and the overlay window is actually
+        showing. `active` implies `armed`.
         """
         if not armed:
             status_text.value = "Stopped"
         elif active:
             status_text.value = "Running"
         else:
-            status_text.value = "Waiting for Roblox..."
+            status_text.value = f"Waiting for {watch_label['text']}..."
         start_button.disabled = armed or not image_path_text.data
         stop_button.disabled = not armed
         pick_button.disabled = armed
@@ -156,21 +243,60 @@ def build_view(page: ft.Page) -> ft.View:
         width_field.disabled = armed
         height_field.disabled = armed
         pick_area_button.disabled = armed
-        click_through_checkbox.disabled = armed
+        revert_area_button.disabled = armed
         page.update()
+
+    committed_area = dict(area)
+    previous_area: Optional[dict] = None
+
+    def _apply_area(new_area: dict):
+        """Persist `new_area` as the committed area, remembering whatever
+        was committed before it so Revert can restore it.
+
+        A no-op change (new_area equal to what's already committed)
+        doesn't overwrite the remembered previous value, so pressing
+        Start or blurring an untouched field doesn't erase an available
+        revert.
+        """
+        nonlocal committed_area, previous_area
+        if new_area != committed_area:
+            previous_area = dict(committed_area)
+            revert_area_button.visible = True
+        committed_area = dict(new_area)
+        set_widget_setting(page, WIDGET_ID, "area", committed_area)
+
+    def _set_area_fields(values: dict):
+        x_field.value = str(values["x"])
+        y_field.value = str(values["y"])
+        width_field.value = str(values["width"])
+        height_field.value = str(values["height"])
 
     def save_area() -> dict:
         """Read the area fields, persist them, and write the parsed
         values back into the fields so an out-of-range entry is
         visibly corrected.
         """
-        current = _parse_area(x_field, y_field, width_field, height_field, area)
-        x_field.value = str(current["x"])
-        y_field.value = str(current["y"])
-        width_field.value = str(current["width"])
-        height_field.value = str(current["height"])
-        set_widget_setting(page, WIDGET_ID, "area", current)
+        current = _parse_area(x_field, y_field, width_field, height_field, committed_area)
+        _set_area_fields(current)
+        _apply_area(current)
         return current
+
+    def on_revert_area(e: ft.Event[ft.TextButton]):
+        """Restore the area committed just before the last change.
+
+        Only one step of history is kept - this is a quick undo for an
+        accidental pick or typo, not a full history stack.
+        """
+        nonlocal committed_area, previous_area
+        if previous_area is None:
+            return
+        restored = dict(previous_area)
+        _set_area_fields(restored)
+        set_widget_setting(page, WIDGET_ID, "area", restored)
+        committed_area = restored
+        previous_area = None
+        revert_area_button.visible = False
+        page.update()
 
     async def on_pick(e: ft.Event[ft.OutlinedButton]):
         """Open the file picker and store the chosen image's path.
@@ -199,11 +325,8 @@ def build_view(page: ft.Page) -> ft.View:
         picked = await _pick_area()
         pick_area_button.disabled = False
         if picked is not None:
-            x_field.value = str(picked["x"])
-            y_field.value = str(picked["y"])
-            width_field.value = str(picked["width"])
-            height_field.value = str(picked["height"])
-            set_widget_setting(page, WIDGET_ID, "area", picked)
+            _set_area_fields(picked)
+            _apply_area(picked)
         page.update()
 
     def on_area_field_blur(e: ft.Event[ft.TextField]):
@@ -238,21 +361,25 @@ def build_view(page: ft.Page) -> ft.View:
 
     def on_exit(code: int):
         """Reflect an overlay window's exit, whether the poll loop closed
-        it because Roblox closed, or it crashed on its own.
+        it because the watched app closed, or it crashed on its own.
 
-        If the poll loop is still armed, this just means Roblox isn't
-        open right now - fall back to "Waiting for Roblox...", the poll
-        loop keeps running. If it's not armed, Stop or on_line already
-        set the final state, so this is a no-op.
+        If the poll loop is still armed and watching, this just means the
+        watched app isn't open right now - fall back to "Waiting for ...",
+        the poll loop keeps running. Otherwise (watching turned off, or
+        Stop/on_line already handled it) there's nothing to wait for, so
+        this disarms the widget entirely.
         """
         page.session.store.set(_PROCESS_KEY, None)
         poll_state = page.session.store.get(_POLL_STATE_KEY)
-        if poll_state is not None and poll_state["armed"]:
+        if poll_state is not None and poll_state["armed"] and poll_state["watch_enabled"]:
             set_state(armed=True, active=False)
+        elif poll_state is not None and poll_state["armed"]:
+            _disarm()
+            set_state(armed=False, active=False)
 
-    async def _poll_roblox(command: list[str], poll_state: dict):
-        """While armed, start the overlay backend when Roblox is running
-        and stop it when Roblox isn't, checking every
+    async def _poll_target(command: list[str], poll_state: dict, watch_app_path: str):
+        """While armed, start the overlay backend when the watched app is
+        running and stop it when it isn't, checking every
         POLL_INTERVAL_SECONDS.
 
         `poll_state["armed"]` is a plain dict rather than a variable so
@@ -260,11 +387,11 @@ def build_view(page: ft.Page) -> ft.View:
         the next wake-up see it.
         """
         while poll_state["armed"]:
-            roblox_open = await asyncio.to_thread(is_roblox_running)
+            target_open = await _is_watch_target_running(watch_app_path)
             if not poll_state["armed"]:
                 break
             current_process: WidgetProcess | None = page.session.store.get(_PROCESS_KEY)
-            if roblox_open and current_process is None:
+            if target_open and current_process is None:
                 widget_process = await start_process(
                     page, *command, on_line=on_line, on_exit=on_exit
                 )
@@ -273,27 +400,44 @@ def build_view(page: ft.Page) -> ft.View:
                     break
                 page.session.store.set(_PROCESS_KEY, widget_process)
                 set_state(armed=True, active=True)
-            elif not roblox_open and current_process is not None:
+            elif not target_open and current_process is not None:
                 stop_process(current_process)
                 page.session.store.set(_PROCESS_KEY, None)
                 set_state(armed=True, active=False)
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
     async def on_start(e: ft.Event[ft.FilledButton]):
+        """Arm the overlay. If watching is turned off in Settings, the
+        image shows immediately and stays up until Stop; otherwise it
+        only shows while the watched app (Roblox by default, or a chosen
+        app) is open.
+        """
         image_path = image_path_text.data
         if not image_path:
             return
         current_area = save_area()
-
-        command = _backend_command(
-            image_path,
-            current_area,
-            click_through_checkbox.value or False,
+        click_through = get_widget_setting(
+            page, WIDGET_ID, "click_through", DEFAULT_CLICK_THROUGH
         )
-        poll_state = {"armed": True}
+        watch_enabled = get_widget_setting(page, WIDGET_ID, "watch_enabled", DEFAULT_WATCH_ENABLED)
+        watch_app_path = get_widget_setting(page, WIDGET_ID, "watch_app_path", "")
+        watch_label["text"] = Path(watch_app_path).stem if watch_app_path else "Roblox"
+
+        command = _backend_command(image_path, current_area, click_through)
+        poll_state = {"armed": True, "watch_enabled": watch_enabled}
         page.session.store.set(_POLL_STATE_KEY, poll_state)
+
+        if not watch_enabled:
+            widget_process = await start_process(page, *command, on_line=on_line, on_exit=on_exit)
+            if not poll_state["armed"]:
+                stop_process(widget_process)
+                return
+            page.session.store.set(_PROCESS_KEY, widget_process)
+            set_state(armed=True, active=True)
+            return
+
         set_state(armed=True, active=False)
-        page.run_task(_poll_roblox, command, poll_state)
+        page.run_task(_poll_target, command, poll_state, watch_app_path)
 
     def on_stop(e: ft.Event[ft.FilledButton]):
         _disarm()
@@ -305,6 +449,7 @@ def build_view(page: ft.Page) -> ft.View:
 
     pick_button.on_click = on_pick
     pick_area_button.on_click = on_pick_area
+    revert_area_button.on_click = on_revert_area
     for field in (x_field, y_field, width_field, height_field):
         field.on_blur = on_area_field_blur
     start_button.on_click = on_start
@@ -315,17 +460,18 @@ def build_view(page: ft.Page) -> ft.View:
             ft.Text("Image Overlay", size=24, weight=ft.FontWeight.BOLD),
             ft.Text(
                 "Pins an image on top of everything else on screen, inside "
-                "the area below, with no window chrome or taskbar entry. "
-                "Shows only while Roblox is open, and hides automatically "
-                "once it closes.",
+                "the area below, with no window chrome or taskbar entry. By "
+                "default it shows only while Roblox is open, and hides once "
+                "it closes; change what it watches for, or turn that off "
+                "entirely, in Settings.",
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
             ft.Row([pick_button, image_path_text]),
             ft.Text("Area", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Row([x_field, y_field, width_field, height_field]),
-            pick_area_button,
-            click_through_checkbox,
+            ft.Row([pick_area_button, revert_area_button], wrap=True, spacing=8),
+            pick_area_hint,
             ft.Row([start_button, stop_button]),
             status_text,
         ],
@@ -342,47 +488,103 @@ def build_view(page: ft.Page) -> ft.View:
 
 
 def build_settings(page: ft.Page) -> ft.Control:
-    """The Image Overlay's Settings section: defaults for a fresh screen."""
+    """The Image Overlay's Settings section: whether it watches for an app
+    at all, which app that is, and click-through.
 
-    area = get_widget_setting(page, WIDGET_ID, "area", DEFAULT_AREA)
-    x_field = ft.TextField(label="X", value=str(area["x"]), width=90)
-    y_field = ft.TextField(label="Y", value=str(area["y"]), width=90)
-    width_field = ft.TextField(label="Width", value=str(area["width"]), width=90)
-    height_field = ft.TextField(label="Height", value=str(area["height"]), width=90)
+    The area (position and size) is already fully editable, and saved
+    immediately, on the Image Overlay screen itself - duplicating it
+    here would just be a second place for the same value to go stale in.
+    Click-through and the watch target are the opposite case: neither is
+    something to reconsider each time the screen opens, so they live only
+    here instead of as controls on that screen.
+    """
+    watch_enabled = get_widget_setting(page, WIDGET_ID, "watch_enabled", DEFAULT_WATCH_ENABLED)
+    watch_app_path = get_widget_setting(page, WIDGET_ID, "watch_app_path", "")
 
-    def on_area_field_blur(e: ft.Event[ft.TextField]):
-        current = _parse_area(x_field, y_field, width_field, height_field, area)
-        x_field.value = str(current["x"])
-        y_field.value = str(current["y"])
-        width_field.value = str(current["width"])
-        height_field.value = str(current["height"])
-        e.control.update()
-        set_widget_setting(page, WIDGET_ID, "area", current)
+    def watch_label(app_path: str) -> str:
+        return Path(app_path).stem if app_path else "Roblox"
 
-    for field in (x_field, y_field, width_field, height_field):
-        field.on_blur = on_area_field_blur
+    current_watch_text = ft.Text(watch_label(watch_app_path), size=13, weight=ft.FontWeight.W_600)
+    watch_row = ft.Row(
+        [
+            ft.Text("Watching for:", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+            current_watch_text,
+        ],
+        spacing=6,
+        visible=watch_enabled,
+    )
+    browse_button = ft.OutlinedButton(
+        "Choose a different app...", visible=watch_enabled
+    )
+    reset_button = ft.TextButton(
+        "Use Roblox instead",
+        icon=ft.Icons.UNDO,
+        visible=watch_enabled and bool(watch_app_path),
+    )
+
+    async def on_browse(e: ft.Event[ft.OutlinedButton]):
+        picked = await _pick_app_path()
+        if not picked:
+            return
+        set_widget_setting(page, WIDGET_ID, "watch_app_path", picked)
+        current_watch_text.value = watch_label(picked)
+        reset_button.visible = True
+        current_watch_text.update()
+        reset_button.update()
+
+    def on_reset(e: ft.Event[ft.TextButton]):
+        set_widget_setting(page, WIDGET_ID, "watch_app_path", "")
+        current_watch_text.value = watch_label("")
+        reset_button.visible = False
+        current_watch_text.update()
+        reset_button.update()
+
+    browse_button.on_click = on_browse
+    reset_button.on_click = on_reset
+
+    def on_watch_enabled_change(e: ft.Event[ft.Checkbox]):
+        enabled = e.control.value
+        set_widget_setting(page, WIDGET_ID, "watch_enabled", enabled)
+        watch_row.visible = enabled
+        browse_button.visible = enabled
+        reset_button.visible = enabled and bool(watch_app_path)
+        watch_row.update()
+        browse_button.update()
+        reset_button.update()
 
     def on_click_through_change(e: ft.Event[ft.Checkbox]):
-        set_widget_setting(page, WIDGET_ID, "default_click_through", e.control.value)
+        set_widget_setting(page, WIDGET_ID, "click_through", e.control.value)
 
-    default_click_through = get_widget_setting(
-        page, WIDGET_ID, "default_click_through", DEFAULT_CLICK_THROUGH
-    )
+    click_through = get_widget_setting(page, WIDGET_ID, "click_through", DEFAULT_CLICK_THROUGH)
 
     return ft.Column(
         [
             ft.Text(
-                "These are the values the Image Overlay screen starts with "
-                "each time it opens. The area is also editable, and saved "
-                "immediately, from the Image Overlay screen itself.",
+                "By default, the overlay only shows while Roblox is open, "
+                "and hides once it closes. Turn this off to have it show "
+                "as soon as you press Start and stay up until you press "
+                "Stop, regardless of what's open.",
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
-            ft.Text("Area", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Row([x_field, y_field, width_field, height_field]),
             ft.Checkbox(
-                label="Click-through by default (Windows only)",
-                value=default_click_through,
+                label="Only show while an app is open",
+                value=watch_enabled,
+                on_change=on_watch_enabled_change,
+            ),
+            watch_row,
+            ft.Row([browse_button, reset_button], wrap=True, spacing=8),
+            ft.Divider(),
+            ft.Text(
+                "Whether clicks pass through the overlay to whatever's "
+                "underneath it, instead of landing on the overlay itself. "
+                "Windows only.",
+                size=12,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            ),
+            ft.Checkbox(
+                label="Click-through",
+                value=click_through,
                 on_change=on_click_through_change,
             ),
         ],
@@ -393,7 +595,9 @@ def build_settings(page: ft.Page) -> ft.Control:
 WIDGET = Widget(
     id=WIDGET_ID,
     name="Image Overlay",
-    description="Pins an image on top of everything else on screen while Roblox is open.",
+    description=(
+        "Pins an image on top of everything else on screen, by default while Roblox is open."
+    ),
     build_view=build_view,
     build_settings=build_settings,
     icon=ft.Icons.IMAGE_OUTLINED,

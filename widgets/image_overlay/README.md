@@ -1,17 +1,28 @@
 # Image Overlay
 
-Pins an image on top of everything else on screen while Roblox is open.
-`widget.py` builds the UI with Flet, but the overlay itself is a separate
-always-on-top, borderless window (`backend/overlay_image.py`) it starts and
-stops, the same any-language-backend pattern `widgets/autoclicker` uses. That
-window has no picture-viewer chrome and no taskbar entry, so nothing about it
-looks like a window was opened at all.
+Pins an image on top of everything else on screen, by default while Roblox
+is open. `widget.py` builds the UI with Flet, but the overlay itself is a
+separate always-on-top, borderless window (`backend/overlay_image.py`) it
+starts and stops, the same any-language-backend pattern `widgets/autoclicker`
+uses. That window has no picture-viewer chrome and no taskbar entry, so
+nothing about it looks like a window was opened at all.
 
-Pressing Start doesn't show the image immediately. It arms a background poll
-(`multitool/roblox/detect.py::is_roblox_running`, checked every few seconds)
-that starts the overlay window only while a Roblox game client process
-exists, and stops it the moment Roblox closes. Press Stop to disarm it
+By default, pressing Start doesn't show the image immediately. It arms a
+background poll (`multitool/roblox/detect.py::is_roblox_running`, checked
+every few seconds) that starts the overlay window only while Roblox is
+running, and stops it the moment Roblox closes. Press Stop to disarm it
 entirely.
+
+## Watching for an app
+
+Settings has two controls for this:
+
+- **"Only show while an app is open"**, on by default. Turn it off and the
+  overlay shows as soon as Start is pressed and stays up until Stop,
+  regardless of what else is running.
+- With that on, **"Choose a different app..."** picks an `.exe` (Windows) or
+  app bundle (macOS) to watch for instead of Roblox. "Use Roblox instead"
+  clears the choice back to the default.
 
 Only PNG and GIF are supported. The backend decodes images with tkinter's
 own `PhotoImage`, so it needs no extra dependency, but tkinter can't decode
