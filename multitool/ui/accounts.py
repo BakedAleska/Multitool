@@ -11,10 +11,19 @@ import httpx
 
 from multitool.data import accounts as accounts_store
 from multitool.logs import get_logger
+from multitool.roblox import status as status_tracker
+from multitool.roblox.process_watch import running_pids
 from multitool.state import get_compact_mode, get_show_avatars, get_sort_order
 from multitool.ui.join_action import join_with_account
 from multitool.ui.layout import build_layout
-from multitool.ui.style import card_border, radius_card, scroll_padding
+from multitool.ui.style import (
+    SPACE_MD,
+    card_border,
+    radius_card,
+    scroll_padding,
+    text_label,
+    text_title,
+)
 from multitool.ui.toast import show_confirm_toast
 
 logger = get_logger(__name__)
@@ -26,6 +35,19 @@ COMPACT_AVATAR_SIZE = 28
 
 USER_URL = "https://users.roblox.com/v1/users/{user_id}"
 THUMBNAIL_URL = "https://thumbnails.roblox.com/v1/users/avatar-headshot"
+
+_GENERATION_KEY = "_accounts_view_generation"
+
+STATUS_COLORS = {
+    status_tracker.GREY: ft.Colors.OUTLINE_VARIANT,
+    status_tracker.RED: ft.Colors.ERROR,
+    status_tracker.GREEN: ft.Colors.GREEN,
+}
+STATUS_LABELS = {
+    status_tracker.GREY: "Not in a place",
+    status_tracker.RED: "Roblox may have crashed",
+    status_tracker.GREEN: "In a place",
+}
 
 
 def fetch_profile(user_id: int) -> dict:
@@ -100,6 +122,23 @@ def AccountsView(page: ft.Page) -> ft.View:
         page.views[-1] = AccountsView(page)
         page.update()
 
+    search_field = ft.TextField(
+        hint_text="Search",
+        prefix_icon=ft.Icons.SEARCH,
+        dense=True,
+        expand=True,
+        on_change=lambda e: render_account_list(),
+    )
+
+    def account_matches(account: dict) -> bool:
+        query = (search_field.value or "").strip().lower()
+        if not query:
+            return True
+        haystack = " ".join(
+            [account.get("name", ""), account.get("display_name") or "", account.get("notes") or ""]
+        ).lower()
+        return query in haystack
+
     async def backfill_missing_profiles():
         """Fill in display_name and avatar_url for older accounts.
 
@@ -124,6 +163,40 @@ def AccountsView(page: ft.Page) -> ft.View:
         if changed:
             accounts_store.save(current)
             refresh()
+
+    async def poll_status_loop(generation: int):
+        """Repeatedly refresh every account's status dot from presence.
+
+        Runs on a timer for as long as this exact view build is the one
+        on screen, tracked by generation rather than route alone - a
+        route match isn't enough, since refresh() replaces this view
+        with a new build (and a new loop) that would otherwise run
+        alongside this one, doubling up forever.
+        """
+        while True:
+            if (
+                not page.views
+                or page.views[-1].route != "/accounts"
+                or page.session.store.get(_GENERATION_KEY) != generation
+            ):
+                return
+            await status_tracker.poll_presence(page, accounts_store.load(), refresh)
+            await asyncio.sleep(status_tracker.AMBIENT_POLL_SECONDS)
+
+    async def do_join(account: dict):
+        """Join with one account, then watch for a crash or an in-place status.
+
+        Snapshots running Roblox processes before the join dispatches, so
+        watch_join can tell a newly launched process apart from one that
+        was already open for another account.
+        """
+        before_pids = await asyncio.to_thread(running_pids)
+        cookie = account.get("security_cookie")
+        launched = await join_with_account(page, account)
+        if launched and cookie:
+            page.run_task(
+                status_tracker.watch_join, page, account["id"], before_pids, cookie, refresh
+            )
 
     def add_account(payload: dict):
         """Add a newly logged in account, unless it's already tracked."""
@@ -208,6 +281,12 @@ def AccountsView(page: ft.Page) -> ft.View:
         the bottom of the avatar frame. The handle's own padding is set
         to match IconButton's default padding, so it sits flush with the
         play and remove buttons next to it.
+
+        The status dot sits below the drag handle, centered on the same
+        column as the play/remove buttons and drag handle rather than
+        tucked into the raw corner. When avatars are shown outside
+        compact mode, its vertical center lines up with the bottom edge
+        of the avatar frame instead of the card's bottom edge.
         """
         username = account["name"]
         display_name = account.get("display_name") or username
@@ -221,6 +300,17 @@ def AccountsView(page: ft.Page) -> ft.View:
         show_avatars = get_show_avatars(page)
 
         row_controls: list[ft.Control] = []
+
+        dot_size = 8 if compact else 10
+        account_status = status_tracker.get_status(page, account["id"])
+        status_dot = ft.Container(
+            width=dot_size,
+            height=dot_size,
+            bgcolor=STATUS_COLORS[account_status],
+            border=ft.Border.all(2, ft.Colors.SURFACE),
+            border_radius=dot_size / 2,
+            tooltip=STATUS_LABELS[account_status],
+        )
 
         if show_avatars:
             avatar_url = account.get("avatar_url")
@@ -240,7 +330,7 @@ def AccountsView(page: ft.Page) -> ft.View:
                 )
             )
 
-        column_controls: list[ft.Control] = [ft.Text(header_text, weight=ft.FontWeight.W_500)]
+        column_controls: list[ft.Control] = [text_label(header_text)]
 
         if not compact:
             column_controls.append(
@@ -257,7 +347,7 @@ def AccountsView(page: ft.Page) -> ft.View:
                 )
             )
 
-        is_manual = sort_order == "manual"
+        is_manual = sort_order == "manual" and not (search_field.value or "").strip()
         compact_row = compact and is_manual
 
         row_controls.append(ft.Column(column_controls, expand=True, spacing=2))
@@ -284,13 +374,20 @@ def AccountsView(page: ft.Page) -> ft.View:
 
         stack_controls = [card]
 
+        handle_icon_size = 18
+        handle_padding = 8
+        handle_box_size = handle_icon_size + handle_padding * 2
+
+        status_dot.right = 2 + (handle_box_size - dot_size) / 2
+        if show_avatars and not compact:
+            avatar_bottom = card_padding + avatar_size
+            status_dot.top = avatar_bottom - dot_size / 2
+        else:
+            status_dot.bottom = 2
+
         drag_handle_widget = None
-        handle_box_size = 0
 
         if is_manual:
-            handle_icon_size = 18
-            handle_padding = 8
-            handle_box_size = handle_icon_size + handle_padding * 2
 
             def on_handle_hover(e: ft.Event[ft.Container]):
                 """Fade the drag handle in and out on hover."""
@@ -318,7 +415,7 @@ def AccountsView(page: ft.Page) -> ft.View:
             icon=ft.Icons.PLAY_CIRCLE_OUTLINE,
             icon_size=18,
             tooltip="Join place",
-            on_click=lambda e, a=account: page.run_task(join_with_account, page, a),
+            on_click=lambda e, a=account: page.run_task(do_join, a),
         )
 
         remove_button = ft.IconButton(
@@ -356,22 +453,53 @@ def AccountsView(page: ft.Page) -> ft.View:
                     handle_top = 2
                 else:
                     handle_top = (
-                        card_padding + avatar_size - handle_box_size if show_avatars else 2
+                        card_padding + avatar_size - handle_box_size - 4 if show_avatars else 2
                     )
                 stack_controls.append(
                     ft.Container(content=drag_handle_widget, top=handle_top, right=2)
                 )
 
+        stack_controls.append(status_dot)
+
         return ft.Stack(stack_controls)
 
     sort_order = get_sort_order(page)
-    accounts = sort_accounts(accounts_store.load(), sort_order)
     list_spacing = 8 if get_compact_mode(page) else 14
+
+    def render_account_list(mounted: bool = True):
+        """Recompute the filtered, sorted account list in place.
+
+        Only the list control's own contents change here - the search
+        field itself is never rebuilt, so typing doesn't lose focus or
+        reset what's been typed the way a full AccountsView(page) rebuild
+        would.
+        """
+        sorted_accounts = sort_accounts(accounts_store.load(), sort_order)
+        accounts = [a for a in sorted_accounts if account_matches(a)]
+        if sort_order == "manual":
+            account_list.controls = [
+                ft.Container(
+                    content=build_account_card(a, sort_order),
+                    key=str(a["id"]),
+                    margin=ft.Margin.only(bottom=list_spacing),
+                )
+                for a in accounts
+            ]
+        else:
+            account_list.controls = [build_account_card(a, sort_order) for a in accounts]
+        if mounted:
+            account_list.update()
 
     if sort_order == "manual":
 
         def on_reorder(e: ft.OnReorderEvent):
-            """Move one account to its new position and save the order."""
+            """Move one account to its new position and save the order.
+
+            Only reachable while unfiltered: build_account_card hides the
+            drag handle whenever a search is active, since the displayed
+            indices then no longer line up with accounts_store.load()'s
+            raw order, which this handler assumes.
+            """
             current = accounts_store.load()
             item = current.pop(e.old_index)
             current.insert(e.new_index, item)
@@ -379,14 +507,7 @@ def AccountsView(page: ft.Page) -> ft.View:
             refresh()
 
         account_list: ft.Control = ft.ReorderableListView(
-            controls=[
-                ft.Container(
-                    content=build_account_card(a, sort_order),
-                    key=str(a["id"]),
-                    margin=ft.Margin.only(bottom=list_spacing),
-                )
-                for a in accounts
-            ],
+            controls=[],
             expand=True,
             show_default_drag_handles=False,
             on_reorder=on_reorder,
@@ -394,11 +515,10 @@ def AccountsView(page: ft.Page) -> ft.View:
         )
     else:
         account_list = ft.ListView(
-            controls=[build_account_card(a, sort_order) for a in accounts],
-            expand=True,
-            spacing=list_spacing,
-            padding=scroll_padding(),
+            controls=[], expand=True, spacing=list_spacing, padding=scroll_padding()
         )
+
+    render_account_list(mounted=False)
 
     add_button = ft.IconButton(
         icon=ft.Icons.ADD,
@@ -410,10 +530,12 @@ def AccountsView(page: ft.Page) -> ft.View:
         [
             ft.Row(
                 [
-                    ft.Text("Accounts", size=24, weight=ft.FontWeight.BOLD),
+                    text_title("Accounts"),
+                    search_field,
                     add_button,
                 ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                spacing=SPACE_MD,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             account_list,
         ],
@@ -421,6 +543,10 @@ def AccountsView(page: ft.Page) -> ft.View:
     )
 
     page.run_task(backfill_missing_profiles)
+
+    generation = (page.session.store.get(_GENERATION_KEY) or 0) + 1
+    page.session.store.set(_GENERATION_KEY, generation)
+    page.run_task(poll_status_loop, generation)
 
     return ft.View(
         route="/accounts",
