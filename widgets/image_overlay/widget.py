@@ -32,13 +32,10 @@ WIDGET_ID = "image_overlay"
 _PROCESS_KEY = f"_{WIDGET_ID}_process"
 
 DEFAULT_AREA = {"x": 100, "y": 100, "width": 300, "height": 300}
-DEFAULT_OPACITY = 0.85
 DEFAULT_CLICK_THROUGH = True
 
 
-def _backend_command(
-    image_path: str, area: dict, opacity: float, click_through: bool
-) -> list[str]:
+def _backend_command(image_path: str, area: dict, click_through: bool) -> list[str]:
     """The command that starts `backend/overlay_image.py` with these options."""
     command = [
         sys.executable,
@@ -53,8 +50,6 @@ def _backend_command(
         str(area["width"]),
         "--height",
         str(area["height"]),
-        "--opacity",
-        str(opacity),
     ]
     if click_through:
         command.append("--click-through")
@@ -110,7 +105,6 @@ def _parse_area(x_field: ft.TextField, y_field: ft.TextField, w_field: ft.TextFi
 def build_view(page: ft.Page) -> ft.View:
     """The Image Overlay's own screen: pick an image, place it, pin it."""
     area = get_widget_setting(page, WIDGET_ID, "area", DEFAULT_AREA)
-    default_opacity = get_widget_setting(page, WIDGET_ID, "default_opacity", DEFAULT_OPACITY)
     default_click_through = get_widget_setting(
         page, WIDGET_ID, "default_click_through", DEFAULT_CLICK_THROUGH
     )
@@ -123,9 +117,6 @@ def build_view(page: ft.Page) -> ft.View:
     width_field = ft.TextField(label="Width", value=str(area["width"]), width=90)
     height_field = ft.TextField(label="Height", value=str(area["height"]), width=90)
     pick_area_button = ft.OutlinedButton("Pick area on screen...")
-    opacity_slider = ft.Slider(
-        min=0.1, max=1.0, divisions=18, value=default_opacity, label="{value}"
-    )
     click_through_checkbox = ft.Checkbox(
         label="Click-through (Windows only)", value=default_click_through
     )
@@ -144,7 +135,6 @@ def build_view(page: ft.Page) -> ft.View:
         width_field.disabled = running
         height_field.disabled = running
         pick_area_button.disabled = running
-        opacity_slider.disabled = running
         click_through_checkbox.disabled = running
         page.update()
 
@@ -225,7 +215,6 @@ def build_view(page: ft.Page) -> ft.View:
         command = _backend_command(
             image_path,
             current_area,
-            opacity_slider.value,
             click_through_checkbox.value or False,
         )
         widget_process = await start_process(page, *command, on_line=on_line, on_exit=on_exit)
@@ -259,8 +248,6 @@ def build_view(page: ft.Page) -> ft.View:
             ft.Text("Area", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Row([x_field, y_field, width_field, height_field]),
             pick_area_button,
-            ft.Text("Opacity", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-            opacity_slider,
             click_through_checkbox,
             ft.Row([start_button, stop_button]),
             status_text,
@@ -298,13 +285,9 @@ def build_settings(page: ft.Page) -> ft.Control:
     for field in (x_field, y_field, width_field, height_field):
         field.on_blur = on_area_field_blur
 
-    def on_opacity_change(e: ft.Event[ft.Slider]):
-        set_widget_setting(page, WIDGET_ID, "default_opacity", e.control.value)
-
     def on_click_through_change(e: ft.Event[ft.Checkbox]):
         set_widget_setting(page, WIDGET_ID, "default_click_through", e.control.value)
 
-    default_opacity = get_widget_setting(page, WIDGET_ID, "default_opacity", DEFAULT_OPACITY)
     default_click_through = get_widget_setting(
         page, WIDGET_ID, "default_click_through", DEFAULT_CLICK_THROUGH
     )
@@ -320,15 +303,6 @@ def build_settings(page: ft.Page) -> ft.Control:
             ),
             ft.Text("Area", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Row([x_field, y_field, width_field, height_field]),
-            ft.Text("Default opacity", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Slider(
-                min=0.1,
-                max=1.0,
-                divisions=18,
-                value=default_opacity,
-                label="{value}",
-                on_change=on_opacity_change,
-            ),
             ft.Checkbox(
                 label="Click-through by default (Windows only)",
                 value=default_click_through,

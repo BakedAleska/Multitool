@@ -70,7 +70,6 @@ def main() -> None:
     parser.add_argument("--y", type=int, default=0)
     parser.add_argument("--width", type=int, default=0)
     parser.add_argument("--height", type=int, default=0)
-    parser.add_argument("--opacity", type=float, default=0.85)
     parser.add_argument("--click-through", action="store_true")
     args = parser.parse_args()
 
@@ -88,10 +87,6 @@ def main() -> None:
 
     root.overrideredirect(True)
     root.attributes("-topmost", True)
-    try:
-        root.attributes("-alpha", max(0.05, min(1.0, args.opacity)))
-    except tk.TclError:
-        pass
 
     root.geometry(f"{width}x{height}+{args.x}+{args.y}")
 

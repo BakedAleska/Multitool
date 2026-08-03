@@ -26,10 +26,11 @@ larger, the extra space is transparent on Windows (a solid near-black
 box on macOS, which has no equivalent transparency trick).
 
 The area can be typed in directly, or set by clicking "Pick area on
-screen...", which opens a fullscreen picker: the screen's edges are
-outlined in red, and you click and drag to draw a rectangle, then press
-Enter to confirm it (or Escape to cancel). Either way the area is saved
-immediately, so it's still there next time the app opens.
+screen...", which opens a fullscreen picker: the whole screen dims, and
+you click and drag to draw a rectangle, highlighted in cyan with corner
+handles and a live width x height label. Press Enter to confirm it (or
+Escape to cancel). Either way the area is saved immediately, so it's
+still there next time the app opens.
 
 ## Click-through
 
