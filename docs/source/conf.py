@@ -35,4 +35,5 @@ autodoc_default_options = {
 # as italics instead of code.
 default_role = "literal"
 
-html_theme = "alabaster"
+html_theme = "furo"
+html_title = "Multitool"
