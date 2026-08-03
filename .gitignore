@@ -28,3 +28,6 @@ native/**/*.ilk
 
 # Local planning/notes — not published
 plan.md
+
+# Installer build output
+installer/Output/
