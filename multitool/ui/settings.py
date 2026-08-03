@@ -5,6 +5,7 @@ import sys
 
 import flet as ft
 
+from multitool import startup, tray
 from multitool.config import WIDGETS_DIR
 from multitool.roblox.join import extract_place_id
 from multitool.state import (
@@ -14,20 +15,26 @@ from multitool.state import (
     get_installed_themes,
     get_multi_instance,
     get_nav_position,
+    get_open_on_launch,
     get_place_id,
+    get_run_in_background,
     get_show_avatars,
     get_sort_order,
     get_theme_mode,
+    get_widget_start_on_launch,
     install_theme,
     remove_theme,
     resolve_theme_mode,
     set_compact_mode,
     set_multi_instance,
     set_nav_position,
+    set_open_on_launch,
     set_place_id,
+    set_run_in_background,
     set_show_avatars,
     set_sort_order,
     set_theme_mode,
+    set_widget_start_on_launch,
 )
 from multitool.theme import build_theme, parse_theme_input
 from multitool.ui.layout import build_layout
@@ -35,13 +42,20 @@ from multitool.ui.style import (
     SWITCH_SCALE,
     card_border,
     radius_card,
-    scroll_margin,
+    scroll_padding,
     thin_button_style,
 )
 from multitool.ui.toast import show_toast
+from multitool.updater import UpdateError, check_for_update, download_installer, run_installer
+from multitool.version import APP_VERSION
 from multitool.widgets.loader import discover_widgets
 
 _SETTINGS_FOCUS_WIDGET_KEY = "_settings_focus_widget_id"
+_UPDATE_CHECKING_KEY = "_update_checking"
+_UPDATE_CHECKED_KEY = "_update_checked"
+_UPDATE_DOWNLOADING_KEY = "_update_downloading"
+_UPDATE_INFO_KEY = "_update_info"
+_UPDATE_ERROR_KEY = "_update_error"
 
 
 def SettingsView(page: ft.Page) -> ft.View:
@@ -78,6 +92,75 @@ def SettingsView(page: ft.Page) -> ft.View:
 
     def on_multi_instance_change(e: ft.Event[ft.Switch]):
         set_multi_instance(page, e.control.value)
+
+    def on_open_on_launch_change(e: ft.Event[ft.Switch]):
+        """Toggle both the setting and the actual OS startup registration.
+
+        The setting alone is just what the switch reads back on the next
+        Settings build - the registry value (Windows) or LaunchAgent
+        plist (macOS) is what actually makes the app start on login, so
+        both need to change together.
+        """
+        set_open_on_launch(page, e.control.value)
+        startup.set_enabled(e.control.value)
+
+    def on_run_in_background_change(e: ft.Event[ft.Switch]):
+        """Toggle both the setting and the window's live prevent_close.
+
+        Without updating prevent_close here too, turning this off
+        wouldn't take effect until the app was restarted - the close
+        button would keep minimizing to the tray for the rest of this
+        session.
+        """
+        set_run_in_background(page, e.control.value)
+        page.window.prevent_close = e.control.value
+        page.update()
+
+    def rebuild_settings():
+        """Rebuild this view in place, if it's still the one on screen."""
+        if not page.views or page.views[-1].route != "/settings":
+            return
+        page.views[-1] = SettingsView(page)
+        page.update()
+
+    async def on_check_for_updates(e: ft.Event[ft.Button]):
+        """Check GitHub's latest release and store the result for display."""
+        page.session.store.set(_UPDATE_CHECKING_KEY, True)
+        rebuild_settings()
+        try:
+            info = await asyncio.to_thread(check_for_update)
+            page.session.store.set(_UPDATE_INFO_KEY, info)
+            page.session.store.set(_UPDATE_ERROR_KEY, None)
+        except UpdateError as err:
+            page.session.store.set(_UPDATE_INFO_KEY, None)
+            page.session.store.set(_UPDATE_ERROR_KEY, str(err))
+        finally:
+            page.session.store.set(_UPDATE_CHECKING_KEY, False)
+            page.session.store.set(_UPDATE_CHECKED_KEY, True)
+        rebuild_settings()
+
+    async def on_install_update(e: ft.Event[ft.Button]):
+        """Download the update installer, launch it, then close the app.
+
+        The installer's CloseApplications setting would close this app for
+        us anyway if we didn't, but closing it ourselves here means the
+        window goes away on its own terms instead of being killed out
+        from under the user.
+        """
+        info = page.session.store.get(_UPDATE_INFO_KEY)
+        if info is None:
+            return
+        page.session.store.set(_UPDATE_DOWNLOADING_KEY, True)
+        rebuild_settings()
+        try:
+            installer_path = await asyncio.to_thread(download_installer, info)
+        except UpdateError as err:
+            page.session.store.set(_UPDATE_DOWNLOADING_KEY, False)
+            page.session.store.set(_UPDATE_ERROR_KEY, str(err))
+            rebuild_settings()
+            return
+        run_installer(installer_path)
+        await page.window.close()
 
     def on_place_id_blur(e: ft.Event[ft.TextField]):
         """Parse a pasted place URL or id, and save the extracted id."""
@@ -190,8 +273,68 @@ def SettingsView(page: ft.Page) -> ft.View:
     appearance_value = get_theme_mode(page) if get_theme_mode(page) in valid_appearance_values \
         else "system"
 
-    general_tab = ft.Column(
+    update_checking = bool(page.session.store.get(_UPDATE_CHECKING_KEY))
+    update_checked = bool(page.session.store.get(_UPDATE_CHECKED_KEY))
+    update_downloading = bool(page.session.store.get(_UPDATE_DOWNLOADING_KEY))
+    update_info = page.session.store.get(_UPDATE_INFO_KEY)
+    update_error = page.session.store.get(_UPDATE_ERROR_KEY)
+
+    if update_downloading:
+        update_status: ft.Control = ft.Text(
+            f"Downloading version {update_info.version}…",
+            size=12,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+    elif update_checking:
+        update_status = ft.Text(
+            "Checking for updates…", size=12, color=ft.Colors.ON_SURFACE_VARIANT
+        )
+    elif update_error:
+        update_status = ft.Text(update_error, size=12, color=ft.Colors.ERROR)
+    elif update_info:
+        update_status = ft.Text(
+            f"Version {update_info.version} is available.", size=12, color=ft.Colors.PRIMARY
+        )
+    elif update_checked:
+        update_status = ft.Text(
+            "You're on the latest version.", size=12, color=ft.Colors.ON_SURFACE_VARIANT
+        )
+    else:
+        update_status = ft.Text("", size=12)
+
+    update_buttons: list[ft.Control] = [
+        ft.OutlinedButton(
+            "Check for Updates",
+            on_click=on_check_for_updates,
+            disabled=update_checking or update_downloading,
+            style=thin_button_style(),
+        )
+    ]
+    if update_info and not update_downloading:
+        update_buttons.append(
+            ft.FilledButton(
+                f"Install version {update_info.version}",
+                on_click=on_install_update,
+                style=thin_button_style(),
+            )
+        )
+
+    updates_section = (
         [
+            ft.Text("Updates", weight=ft.FontWeight.W_500),
+            ft.Text(f"You're running version {APP_VERSION}.", size=12),
+            update_status,
+            ft.Row(update_buttons, spacing=8),
+            ft.Container(height=8),
+            ft.Divider(height=1, thickness=1, color=ft.Colors.OUTLINE_VARIANT),
+            ft.Container(height=8),
+        ]
+        if sys.platform == "win32"
+        else []
+    )
+
+    general_tab = ft.ListView(
+        controls=[
             ft.Text("Sidebar position", weight=ft.FontWeight.W_500),
             ft.RadioGroup(
                 value=get_nav_position(page),
@@ -217,6 +360,66 @@ def SettingsView(page: ft.Page) -> ft.View:
                 if installed_theme_rows
                 else []
             ),
+            *(
+                [
+                    ft.Text("Startup", weight=ft.FontWeight.W_500),
+                    ft.Row(
+                        [
+                            ft.Column(
+                                [
+                                    ft.Text("Open on launch", weight=ft.FontWeight.W_500),
+                                    ft.Text(
+                                        "Start Multitool automatically when you log in.",
+                                        size=12,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                    ),
+                                ],
+                                spacing=2,
+                                expand=True,
+                            ),
+                            ft.Switch(
+                                value=get_open_on_launch(page),
+                                on_change=on_open_on_launch_change,
+                                scale=SWITCH_SCALE,
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ]
+                if startup.is_supported()
+                else []
+            ),
+            *(
+                [
+                    ft.Row(
+                        [
+                            ft.Column(
+                                [
+                                    ft.Text("Run in background", weight=ft.FontWeight.W_500),
+                                    ft.Text(
+                                        "Closing the window keeps Multitool running in the "
+                                        "hidden icons section instead of closing it. Quit "
+                                        "from there to close it fully.",
+                                        size=12,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                    ),
+                                ],
+                                spacing=2,
+                                expand=True,
+                            ),
+                            ft.Switch(
+                                value=get_run_in_background(page),
+                                on_change=on_run_in_background_change,
+                                scale=SWITCH_SCALE,
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ]
+                if tray.is_supported()
+                else []
+            ),
+            *updates_section,
             ft.Text("Install a Theme", weight=ft.FontWeight.W_500),
             ft.Text(
                 "Paste a theme's JSON, or a link to one, to set a name, colors, "
@@ -230,62 +433,40 @@ def SettingsView(page: ft.Page) -> ft.View:
             *(
                 [
                     ft.Container(height=8),
-                    ft.Container(
-                        content=ft.Column(
-                            [
-                                ft.Container(
-                                    content=ft.Text(
-                                        "Danger Zone",
-                                        size=16,
-                                        weight=ft.FontWeight.W_600,
-                                        color=ft.Colors.ERROR,
+                    ft.Divider(height=1, thickness=1, color=ft.Colors.OUTLINE_VARIANT),
+                    ft.Container(height=8),
+                    ft.Text(
+                        "Danger Zone",
+                        weight=ft.FontWeight.W_500,
+                        color=ft.Colors.ERROR,
+                    ),
+                    ft.Row(
+                        [
+                            ft.Column(
+                                [
+                                    ft.Text(
+                                        "Allow multiple Roblox instances",
+                                        weight=ft.FontWeight.W_500,
                                     ),
-                                    padding=ft.Padding.only(left=16, right=16, top=12, bottom=12),
-                                ),
-                                ft.Container(
-                                    content=ft.Row(
-                                        [
-                                            ft.Column(
-                                                [
-                                                    ft.Text(
-                                                        "Allow multiple Roblox instances",
-                                                        weight=ft.FontWeight.W_500,
-                                                    ),
-                                                    ft.Text(
-                                                        "Lets Join open a second Roblox window "
-                                                        "instead of just switching to one that's "
-                                                        "already open, so more than one account "
-                                                        "can play at once. This works by bypassing "
-                                                        "a check Roblox uses to stop multiple "
-                                                        "instances from running.",
-                                                        size=12,
-                                                        color=ft.Colors.ON_SURFACE_VARIANT,
-                                                    ),
-                                                ],
-                                                spacing=2,
-                                                expand=True,
-                                            ),
-                                            ft.Switch(
-                                                value=get_multi_instance(page),
-                                                on_change=on_multi_instance_change,
-                                                active_color=ft.Colors.ERROR,
-                                                scale=SWITCH_SCALE,
-                                            ),
-                                        ],
-                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    ft.Text(
+                                        "Lets Join open a second Roblox window "
+                                        "instead of just switching to one that's "
+                                        "already open, so more than one account "
+                                        "can play at once.",
+                                        size=12,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
                                     ),
-                                    padding=16,
-                                    border=ft.Border(
-                                        top=ft.BorderSide(
-                                            1, ft.Colors.with_opacity(0.4, ft.Colors.ERROR)
-                                        )
-                                    ),
-                                ),
-                            ],
-                            spacing=0,
-                        ),
-                        border=ft.Border.all(1, ft.Colors.with_opacity(0.5, ft.Colors.ERROR)),
-                        border_radius=radius_card(page),
+                                ],
+                                spacing=2,
+                                expand=True,
+                            ),
+                            ft.Switch(
+                                value=get_multi_instance(page),
+                                on_change=on_multi_instance_change,
+                                scale=SWITCH_SCALE,
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
                 ]
                 if sys.platform == "win32"
@@ -293,13 +474,12 @@ def SettingsView(page: ft.Page) -> ft.View:
             ),
         ],
         spacing=12,
-        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-        scroll=ft.ScrollMode.AUTO,
-        margin=scroll_margin(),
+        expand=True,
+        padding=scroll_padding(),
     )
 
-    accounts_tab = ft.Column(
-        [
+    accounts_tab = ft.ListView(
+        controls=[
             ft.Row(
                 [
                     ft.Column(
@@ -368,9 +548,8 @@ def SettingsView(page: ft.Page) -> ft.View:
             ),
         ],
         spacing=12,
-        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-        scroll=ft.ScrollMode.AUTO,
-        margin=scroll_margin(),
+        expand=True,
+        padding=scroll_padding(),
     )
 
     WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -381,19 +560,50 @@ def SettingsView(page: ft.Page) -> ft.View:
 
     installed_widgets, _load_errors = discover_widgets()
 
+    def on_widget_start_on_launch_change(widget_id: str):
+        def handler(e: ft.Event[ft.Switch]):
+            set_widget_start_on_launch(page, widget_id, e.control.value)
+
+        return handler
+
     widget_settings_sections: list[ft.Control] = []
     for widget in installed_widgets:
-        if widget.build_settings is None:
+        if widget.build_settings is None and widget.on_app_start is None:
             continue
+        section_controls: list[ft.Control] = [
+            ft.Text(widget.name, size=16, weight=ft.FontWeight.W_600),
+        ]
+        if widget.on_app_start is not None:
+            section_controls.append(
+                ft.Row(
+                    [
+                        ft.Column(
+                            [
+                                ft.Text("Start on launch", weight=ft.FontWeight.W_500),
+                                ft.Text(
+                                    f"Start {widget.name} automatically when Multitool "
+                                    "launches.",
+                                    size=12,
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            ],
+                            spacing=2,
+                            expand=True,
+                        ),
+                        ft.Switch(
+                            value=get_widget_start_on_launch(page, widget.id),
+                            on_change=on_widget_start_on_launch_change(widget.id),
+                            scale=SWITCH_SCALE,
+                        ),
+                    ],
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                )
+            )
+        if widget.build_settings is not None:
+            section_controls.append(widget.build_settings(page))
         widget_settings_sections.append(
             ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Text(widget.name, size=16, weight=ft.FontWeight.W_600),
-                        widget.build_settings(page),
-                    ],
-                    spacing=12,
-                ),
+                content=ft.Column(section_controls, spacing=12),
                 padding=12,
                 border=(
                     ft.Border.all(2, ft.Colors.PRIMARY)
@@ -404,8 +614,8 @@ def SettingsView(page: ft.Page) -> ft.View:
             )
         )
 
-    widgets_tab = ft.Column(
-        [
+    widgets_tab = ft.ListView(
+        controls=[
             ft.Text(
                 "Widgets are optional and not bundled with the app. To add one "
                 "manually, place its folder here. Install and enable them from the "
@@ -427,9 +637,8 @@ def SettingsView(page: ft.Page) -> ft.View:
             *widget_settings_sections,
         ],
         spacing=16,
-        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-        scroll=ft.ScrollMode.AUTO,
-        margin=scroll_margin(),
+        expand=True,
+        padding=scroll_padding(),
     )
 
     content = ft.Column(
@@ -452,9 +661,21 @@ def SettingsView(page: ft.Page) -> ft.View:
                         ft.TabBarView(
                             expand=True,
                             controls=[
-                                ft.Container(content=general_tab, padding=ft.Padding.only(top=16)),
-                                ft.Container(content=accounts_tab, padding=ft.Padding.only(top=16)),
-                                ft.Container(content=widgets_tab, padding=ft.Padding.only(top=16)),
+                                ft.Container(
+                                    content=general_tab,
+                                    padding=ft.Padding.only(top=16),
+                                    expand=True,
+                                ),
+                                ft.Container(
+                                    content=accounts_tab,
+                                    padding=ft.Padding.only(top=16),
+                                    expand=True,
+                                ),
+                                ft.Container(
+                                    content=widgets_tab,
+                                    padding=ft.Padding.only(top=16),
+                                    expand=True,
+                                ),
                             ],
                         ),
                     ],

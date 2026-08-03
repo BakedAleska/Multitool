@@ -52,6 +52,15 @@ DEFAULT_WIDGET_SETTINGS = settings_store.DEFAULTS[WIDGET_SETTINGS_KEY]
 MULTI_INSTANCE_KEY = "multi_instance"
 DEFAULT_MULTI_INSTANCE = settings_store.DEFAULTS[MULTI_INSTANCE_KEY]
 
+OPEN_ON_LAUNCH_KEY = "open_on_launch"
+DEFAULT_OPEN_ON_LAUNCH = settings_store.DEFAULTS[OPEN_ON_LAUNCH_KEY]
+
+RUN_IN_BACKGROUND_KEY = "run_in_background"
+DEFAULT_RUN_IN_BACKGROUND = settings_store.DEFAULTS[RUN_IN_BACKGROUND_KEY]
+
+WIDGETS_START_ON_LAUNCH_KEY = "widgets_start_on_launch"
+DEFAULT_WIDGETS_START_ON_LAUNCH = settings_store.DEFAULTS[WIDGETS_START_ON_LAUNCH_KEY]
+
 _SETTINGS_CACHE_KEY = "_settings_cache"
 
 
@@ -168,8 +177,14 @@ def remove_widget_settings(page: ft.Page, widget_id: str) -> None:
         for k, v in current.get(WIDGET_SETTINGS_KEY, DEFAULT_WIDGET_SETTINGS).items()
         if k != widget_id
     }
+    started = [
+        w
+        for w in current.get(WIDGETS_START_ON_LAUNCH_KEY, DEFAULT_WIDGETS_START_ON_LAUNCH)
+        if w != widget_id
+    ]
     current[DISABLED_WIDGETS_KEY] = disabled
     current[WIDGET_SETTINGS_KEY] = widget_settings
+    current[WIDGETS_START_ON_LAUNCH_KEY] = started
     page.session.store.set(_SETTINGS_CACHE_KEY, current)
     settings_store.save(current)
 
@@ -200,6 +215,48 @@ def get_multi_instance(page: ft.Page) -> bool:
 def set_multi_instance(page: ft.Page, value: bool) -> None:
     current = _get_settings(page)
     current[MULTI_INSTANCE_KEY] = value
+    page.session.store.set(_SETTINGS_CACHE_KEY, current)
+    settings_store.save(current)
+
+
+def get_open_on_launch(page: ft.Page) -> bool:
+    return _get_settings(page).get(OPEN_ON_LAUNCH_KEY, DEFAULT_OPEN_ON_LAUNCH)
+
+
+def set_open_on_launch(page: ft.Page, value: bool) -> None:
+    current = _get_settings(page)
+    current[OPEN_ON_LAUNCH_KEY] = value
+    page.session.store.set(_SETTINGS_CACHE_KEY, current)
+    settings_store.save(current)
+
+
+def get_run_in_background(page: ft.Page) -> bool:
+    return _get_settings(page).get(RUN_IN_BACKGROUND_KEY, DEFAULT_RUN_IN_BACKGROUND)
+
+
+def set_run_in_background(page: ft.Page, value: bool) -> None:
+    current = _get_settings(page)
+    current[RUN_IN_BACKGROUND_KEY] = value
+    page.session.store.set(_SETTINGS_CACHE_KEY, current)
+    settings_store.save(current)
+
+
+def get_widget_start_on_launch(page: ft.Page, widget_id: str) -> bool:
+    """Whether widget_id should have its on_app_start hook run at launch."""
+    started = _get_settings(page).get(
+        WIDGETS_START_ON_LAUNCH_KEY, DEFAULT_WIDGETS_START_ON_LAUNCH
+    )
+    return widget_id in started
+
+
+def set_widget_start_on_launch(page: ft.Page, widget_id: str, value: bool) -> None:
+    current = _get_settings(page)
+    started = list(current.get(WIDGETS_START_ON_LAUNCH_KEY, DEFAULT_WIDGETS_START_ON_LAUNCH))
+    if value and widget_id not in started:
+        started.append(widget_id)
+    elif not value and widget_id in started:
+        started.remove(widget_id)
+    current[WIDGETS_START_ON_LAUNCH_KEY] = started
     page.session.store.set(_SETTINGS_CACHE_KEY, current)
     settings_store.save(current)
 

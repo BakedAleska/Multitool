@@ -6,14 +6,21 @@ that take the `ft.Page` and return an `ft.View`. `route_change` below picks
 which one to build for a route.
 """
 
+import inspect
 import sys
 
 sys.dont_write_bytecode = True
 
 import flet as ft  # noqa: E402
 
+from multitool import tray  # noqa: E402
 from multitool.logs import get_logger  # noqa: E402
-from multitool.state import get_active_theme, resolve_theme_mode  # noqa: E402
+from multitool.state import (  # noqa: E402
+    get_active_theme,
+    get_run_in_background,
+    get_widget_start_on_launch,
+    resolve_theme_mode,
+)
 from multitool.theme import build_theme  # noqa: E402
 from multitool.ui.accounts import AccountsView  # noqa: E402
 from multitool.ui.dashboard import DashboardView  # noqa: E402
@@ -44,13 +51,26 @@ def main(page: ft.Page):
     page.session.connection.loop.set_exception_handler(handle_loop_exception)
 
     def on_window_event(e: ft.WindowEvent):
-        """Stop any process a widget started before the window closes.
+        """Handle the window close request.
 
-        Without this, a widget backend such as an autoclicker's click
-        loop would keep running as an orphaned process after the app
-        window closes.
+        With "Run in background" off, this stops any process a widget
+        started (e.g. an autoclicker's click loop) so nothing is left
+        running as an orphan once the window closes.
+
+        With it on, `page.window.prevent_close` is already set below, so
+        the close request lands here instead of actually closing the
+        window: hide it and show a tray icon instead, so the app is still
+        reachable from the hidden icons section (Windows) or menu bar
+        (macOS) rather than fully quitting.
         """
-        if e.type == ft.WindowEventType.CLOSE:
+        if e.type != ft.WindowEventType.CLOSE:
+            return
+        if get_run_in_background(page):
+            page.window.visible = False
+            page.window.skip_task_bar = True
+            page.update()
+            tray.show(page)
+        else:
             stop_all_processes(page)
 
     page.window.on_event = on_window_event
@@ -61,6 +81,7 @@ def main(page: ft.Page):
     page.window.width = 900
     page.window.height = 500
     page.window.resizable = True
+    page.window.prevent_close = get_run_in_background(page)
     page.padding = 0
 
     def route_change(route):
@@ -103,6 +124,29 @@ def main(page: ft.Page):
 
     page.route = "/"
     route_change(page.route)
+
+    async def run_widget_startup_hooks():
+        """Run each enabled widget's on_app_start hook, if it opted in.
+
+        A widget opts in via its own "Start on launch" toggle under
+        Settings -> Widgets (see multitool/widgets/api.py::Widget.on_app_start),
+        not just by defining the hook - the hook itself only runs when
+        that's turned on. One widget's hook failing is logged and
+        skipped, not fatal to the rest.
+        """
+        for widget in get_enabled_widgets(page):
+            if widget.on_app_start is None:
+                continue
+            if not get_widget_start_on_launch(page, widget.id):
+                continue
+            try:
+                result = widget.on_app_start(page)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:
+                logger.exception("Widget '%s' failed to run its startup hook", widget.id)
+
+    page.run_task(run_widget_startup_hooks)
 
 
 def run():

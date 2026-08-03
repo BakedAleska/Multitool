@@ -202,6 +202,39 @@ def _overlay_command() -> list[str]:
     return [sys.executable, str(BACKEND_DIR / "overlay.py")]
 
 
+async def _start_on_app_launch(page: ft.Page) -> None:
+    """Start clicking automatically at app launch, using saved defaults.
+
+    Wired up as Widget.on_app_start, so it only runs if the user turned
+    on this widget's "Start on launch" toggle under Settings -> Widgets.
+    Mirrors build_view's start_clicking(), but runs before any view
+    exists to read live field values from, so it reads the same saved
+    defaults build_view itself initializes those fields from. build_view
+    picks up the already-running process the next time it's opened (see
+    its own already_running check) instead of showing a stale "Stopped".
+    """
+    if page.session.store.get(_CLICK_PROCESS_KEY) is not None:
+        return
+    default_cps = get_widget_setting(page, WIDGET_ID, "default_cps", DEFAULT_CPS)
+    cps = max(CPS_MIN, min(CPS_MAX, int(default_cps)))
+    button = get_widget_setting(page, WIDGET_ID, "default_button", DEFAULT_BUTTON)
+    randomize_timing = get_widget_setting(
+        page, WIDGET_ID, "randomize_timing", DEFAULT_RANDOMIZE_TIMING
+    )
+    show_indicator = get_widget_setting(page, WIDGET_ID, "show_indicator", DEFAULT_SHOW_INDICATOR)
+
+    def on_exit(code: int):
+        page.session.store.set(_CLICK_PROCESS_KEY, None)
+
+    command = _click_backend_command(cps, button, randomize_timing)
+    widget_process = await start_process(page, *command, on_exit=on_exit)
+    page.session.store.set(_CLICK_PROCESS_KEY, widget_process)
+
+    if show_indicator:
+        overlay_process = await start_process(page, *_overlay_command())
+        page.session.store.set(_OVERLAY_PROCESS_KEY, overlay_process)
+
+
 def build_view(page: ft.Page) -> ft.View:
     """The Autoclicker's own screen: CPS, button, keybinds, indicator."""
     default_cps = get_widget_setting(page, WIDGET_ID, "default_cps", DEFAULT_CPS)
@@ -213,16 +246,28 @@ def build_view(page: ft.Page) -> ft.View:
     start_keybinds: list[dict] = get_widget_setting(page, WIDGET_ID, "start_keybinds", [])
     stop_keybinds: list[dict] = get_widget_setting(page, WIDGET_ID, "stop_keybinds", [])
 
-    status_text = ft.Text("Stopped", weight=ft.FontWeight.W_600)
+    already_running = page.session.store.get(_CLICK_PROCESS_KEY) is not None
+    """Whether a click process is already running when this view builds.
+
+    True when the "Start on launch" hook (_start_on_app_launch, below)
+    already started one before the user ever opened this screen. Every
+    control below starts from this instead of always assuming "Stopped",
+    so the screen doesn't show a stale Start button for a loop that's
+    actually already running.
+    """
+
+    status_text = ft.Text("Running" if already_running else "Stopped", weight=ft.FontWeight.W_600)
     count_text = ft.Text("Clicks: 0", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
     cps_field = ft.TextField(
         label="Clicks per second",
         value=str(default_cps),
         width=160,
         helper=f"{CPS_MIN}-{CPS_MAX}",
+        disabled=already_running,
     )
     button_group = ft.RadioGroup(
         value=default_button,
+        disabled=already_running,
         content=ft.Row(
             [
                 ft.Radio(value="left", label="Left click"),
@@ -237,8 +282,8 @@ def build_view(page: ft.Page) -> ft.View:
     randomize_checkbox = ft.Checkbox(
         label=f"Randomize timing slightly (±{RANDOMIZE_PERCENT}%)", value=randomize_timing
     )
-    start_button = ft.FilledButton("Start")
-    stop_button = ft.FilledButton("Stop", disabled=True)
+    start_button = ft.FilledButton("Start", disabled=already_running)
+    stop_button = ft.FilledButton("Stop", disabled=not already_running)
 
     start_chips_row = ft.Row(wrap=True, spacing=6)
     stop_chips_row = ft.Row(wrap=True, spacing=6)
@@ -638,6 +683,7 @@ WIDGET = Widget(
     description="Clicks repeatedly at the cursor. Backend runs outside Python.",
     build_view=build_view,
     build_settings=build_settings,
+    on_app_start=_start_on_app_launch,
     icon=ft.Icons.MOUSE_OUTLINED,
     selected_icon=ft.Icons.MOUSE,
 )

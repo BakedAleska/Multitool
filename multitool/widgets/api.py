@@ -78,6 +78,19 @@ class Widget:
     bar styled to sit inside the outer Settings tabs, rather than looking
     like a second top-level tab row."""
 
+    on_app_start: Optional[Callable[[ft.Page], Any]] = None
+    """Optional: run this widget's own startup behavior once the app has
+    finished launching, e.g. auto-starting a backend process (see
+    multitool/widgets/process.py) instead of waiting for the user to open
+    this widget's screen and start it by hand. May be a plain function or
+    an async one; an awaitable return value is awaited.
+
+    Setting this gives the widget a "Start on launch" toggle under
+    Settings -> Widgets automatically. The hook only runs if that toggle
+    is on *and* the widget itself is enabled - it's never called just
+    because this field is set. Omit if the widget has nothing to do at
+    startup."""
+
 
 def get_widget_data(account: dict, widget_id: str) -> dict:
     """Read this widget's namespaced data out of an account dict.

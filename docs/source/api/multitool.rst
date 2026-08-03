@@ -23,5 +23,9 @@ Submodules
    multitool.app
    multitool.config
    multitool.logs
+   multitool.startup
    multitool.state
    multitool.theme
+   multitool.tray
+   multitool.updater
+   multitool.version
