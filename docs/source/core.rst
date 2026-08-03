@@ -11,5 +11,3 @@ Shared app infrastructure and top-level modules.
    Logs <api/multitool.logs>
    State <api/multitool.state>
    Theme <api/multitool.theme>
-   Updater <api/multitool.updater>
-   Version <api/multitool.version>

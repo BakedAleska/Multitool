@@ -22,15 +22,15 @@
       "name": "Image Overlay",
       "description": "Pins an image on top of everything else on screen.",
       "author": "BakedAleska",
-      "version": "1.1.1",
+      "version": "1.2.0",
       "icon": null,
       "source": {
         "owner": "BakedAleska",
         "repo": "Multitool",
-        "ref": "c86d3a362a2ebdfa177b020820ffa4049e6a7673",
+        "ref": "6c1c19d99d3239bd017077aa8a69fa227a73c53a",
         "path": "widgets/image_overlay"
       },
-      "sha256": "b39dae1486ffe06e32f31f052e879084e93b8727e577387937258c36c87e97aa",
+      "sha256": "98d122c054134bb2911ee15216e122e9522a292f599323e4005b39c192f47d47",
       "homepage": "https://github.com/BakedAleska/Multitool/tree/main/widgets/image_overlay"
     }
   ]
