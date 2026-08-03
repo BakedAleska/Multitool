@@ -9,6 +9,7 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
+   multitool.roblox.detect
    multitool.roblox.join
    multitool.roblox.login
    multitool.roblox.multi_instance

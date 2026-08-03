@@ -10,6 +10,12 @@ about it looks like "a window" was opened at all.
 Only PNG and GIF are supported. The backend uses tkinter's own image
 decoder rather than adding Pillow as a dependency, and tkinter can't
 decode JPEG on its own.
+
+Pressing Start doesn't show the image right away. It arms a background
+poll (multitool/roblox/detect.py::is_roblox_running) that starts the
+backend window only while a Roblox game client process exists, and stops
+it the moment Roblox closes, so the overlay never lingers on the desktop
+after the game it belongs to has closed.
 """
 
 import asyncio
@@ -20,6 +26,7 @@ from typing import Optional
 
 import flet as ft
 
+from multitool.roblox.detect import is_roblox_running
 from multitool.state import get_widget_setting, set_widget_setting
 from multitool.ui.layout import build_layout, widget_route
 from multitool.widgets.api import Widget
@@ -30,9 +37,11 @@ AREA_PICKER_SCRIPT = Path(__file__).parent / "backend" / "area_picker.py"
 
 WIDGET_ID = "image_overlay"
 _PROCESS_KEY = f"_{WIDGET_ID}_process"
+_POLL_STATE_KEY = f"_{WIDGET_ID}_poll_state"
 
 DEFAULT_AREA = {"x": 100, "y": 100, "width": 300, "height": 300}
 DEFAULT_CLICK_THROUGH = True
+POLL_INTERVAL_SECONDS = 3.0
 
 
 def _backend_command(image_path: str, area: dict, click_through: bool) -> list[str]:
@@ -125,17 +134,29 @@ def build_view(page: ft.Page) -> ft.View:
 
     file_picker = ft.FilePicker()
 
-    def set_running(running: bool):
-        status_text.value = "Running" if running else "Stopped"
-        start_button.disabled = running or not image_path_text.data
-        stop_button.disabled = not running
-        pick_button.disabled = running
-        x_field.disabled = running
-        y_field.disabled = running
-        width_field.disabled = running
-        height_field.disabled = running
-        pick_area_button.disabled = running
-        click_through_checkbox.disabled = running
+    def set_state(armed: bool, active: bool):
+        """Reflect the current arm/active state in the status text and
+        control disabled-states.
+
+        `armed` means Start has been pressed and the poll loop is
+        watching for Roblox; `active` means Roblox is currently open and
+        the overlay window is actually showing. `active` implies `armed`.
+        """
+        if not armed:
+            status_text.value = "Stopped"
+        elif active:
+            status_text.value = "Running"
+        else:
+            status_text.value = "Waiting for Roblox..."
+        start_button.disabled = armed or not image_path_text.data
+        stop_button.disabled = not armed
+        pick_button.disabled = armed
+        x_field.disabled = armed
+        y_field.disabled = armed
+        width_field.disabled = armed
+        height_field.disabled = armed
+        pick_area_button.disabled = armed
+        click_through_checkbox.disabled = armed
         page.update()
 
     def save_area() -> dict:
@@ -189,22 +210,74 @@ def build_view(page: ft.Page) -> ft.View:
         save_area()
         page.update()
 
+    def _disarm():
+        """Stop the poll loop and clear armed state, without touching
+        whatever the caller has already put in status_text/image_path_text.
+        """
+        poll_state = page.session.store.get(_POLL_STATE_KEY)
+        if poll_state is not None:
+            poll_state["armed"] = False
+        page.session.store.set(_POLL_STATE_KEY, None)
+
     def on_line(data: dict):
         """Surface a backend startup error, if the process reported one.
 
-        A clean `{"ready": true}` line needs no UI change here, since the
-        Start button already flipped the running state before this fires.
+        An error disarms the poll loop entirely rather than letting it
+        keep retrying, since a bad image or area won't fix itself on the
+        next Roblox open. A clean `{"ready": true}` line needs no UI
+        change here, since the poll loop already flipped to "Running"
+        before this fires.
         """
         error = data.get("error")
         if error:
             status_text.value = "Error"
             image_path_text.value = error
             page.session.store.set(_PROCESS_KEY, None)
-            set_running(False)
+            _disarm()
+            set_state(armed=False, active=False)
 
     def on_exit(code: int):
+        """Reflect an overlay window's exit, whether the poll loop closed
+        it because Roblox closed, or it crashed on its own.
+
+        If the poll loop is still armed, this just means Roblox isn't
+        open right now - fall back to "Waiting for Roblox...", the poll
+        loop keeps running. If it's not armed, Stop or on_line already
+        set the final state, so this is a no-op.
+        """
         page.session.store.set(_PROCESS_KEY, None)
-        set_running(False)
+        poll_state = page.session.store.get(_POLL_STATE_KEY)
+        if poll_state is not None and poll_state["armed"]:
+            set_state(armed=True, active=False)
+
+    async def _poll_roblox(command: list[str], poll_state: dict):
+        """While armed, start the overlay backend when Roblox is running
+        and stop it when Roblox isn't, checking every
+        POLL_INTERVAL_SECONDS.
+
+        `poll_state["armed"]` is a plain dict rather than a variable so
+        on_stop/on_line can flip it from outside this coroutine and have
+        the next wake-up see it.
+        """
+        while poll_state["armed"]:
+            roblox_open = await asyncio.to_thread(is_roblox_running)
+            if not poll_state["armed"]:
+                break
+            current_process: WidgetProcess | None = page.session.store.get(_PROCESS_KEY)
+            if roblox_open and current_process is None:
+                widget_process = await start_process(
+                    page, *command, on_line=on_line, on_exit=on_exit
+                )
+                if not poll_state["armed"]:
+                    stop_process(widget_process)
+                    break
+                page.session.store.set(_PROCESS_KEY, widget_process)
+                set_state(armed=True, active=True)
+            elif not roblox_open and current_process is not None:
+                stop_process(current_process)
+                page.session.store.set(_PROCESS_KEY, None)
+                set_state(armed=True, active=False)
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
     async def on_start(e: ft.Event[ft.FilledButton]):
         image_path = image_path_text.data
@@ -217,16 +290,18 @@ def build_view(page: ft.Page) -> ft.View:
             current_area,
             click_through_checkbox.value or False,
         )
-        widget_process = await start_process(page, *command, on_line=on_line, on_exit=on_exit)
-        page.session.store.set(_PROCESS_KEY, widget_process)
-        set_running(True)
+        poll_state = {"armed": True}
+        page.session.store.set(_POLL_STATE_KEY, poll_state)
+        set_state(armed=True, active=False)
+        page.run_task(_poll_roblox, command, poll_state)
 
     def on_stop(e: ft.Event[ft.FilledButton]):
+        _disarm()
         widget_process: WidgetProcess | None = page.session.store.get(_PROCESS_KEY)
         if widget_process is not None:
             stop_process(widget_process)
         page.session.store.set(_PROCESS_KEY, None)
-        set_running(False)
+        set_state(armed=False, active=False)
 
     pick_button.on_click = on_pick
     pick_area_button.on_click = on_pick_area
@@ -240,7 +315,9 @@ def build_view(page: ft.Page) -> ft.View:
             ft.Text("Image Overlay", size=24, weight=ft.FontWeight.BOLD),
             ft.Text(
                 "Pins an image on top of everything else on screen, inside "
-                "the area below, with no window chrome or taskbar entry.",
+                "the area below, with no window chrome or taskbar entry. "
+                "Shows only while Roblox is open, and hides automatically "
+                "once it closes.",
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
@@ -316,7 +393,7 @@ def build_settings(page: ft.Page) -> ft.Control:
 WIDGET = Widget(
     id=WIDGET_ID,
     name="Image Overlay",
-    description="Pins an image on top of everything else on screen.",
+    description="Pins an image on top of everything else on screen while Roblox is open.",
     build_view=build_view,
     build_settings=build_settings,
     icon=ft.Icons.IMAGE_OUTLINED,

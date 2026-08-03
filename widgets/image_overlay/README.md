@@ -1,11 +1,17 @@
 # Image Overlay
 
-Pins an image on top of everything else on screen. `widget.py` builds the UI
-with Flet, but the overlay itself is a separate always-on-top, borderless
-window (`backend/overlay_image.py`) it starts and stops, the same
-any-language-backend pattern `widgets/autoclicker` uses. That window has no
-picture-viewer chrome and no taskbar entry, so nothing about it looks like a
-window was opened at all.
+Pins an image on top of everything else on screen while Roblox is open.
+`widget.py` builds the UI with Flet, but the overlay itself is a separate
+always-on-top, borderless window (`backend/overlay_image.py`) it starts and
+stops, the same any-language-backend pattern `widgets/autoclicker` uses. That
+window has no picture-viewer chrome and no taskbar entry, so nothing about it
+looks like a window was opened at all.
+
+Pressing Start doesn't show the image immediately. It arms a background poll
+(`multitool/roblox/detect.py::is_roblox_running`, checked every few seconds)
+that starts the overlay window only while a Roblox game client process
+exists, and stops it the moment Roblox closes. Press Stop to disarm it
+entirely.
 
 Only PNG and GIF are supported. The backend decodes images with tkinter's
 own `PhotoImage`, so it needs no extra dependency, but tkinter can't decode
