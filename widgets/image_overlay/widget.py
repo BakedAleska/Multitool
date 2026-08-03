@@ -133,7 +133,6 @@ def build_view(page: ft.Page) -> ft.View:
     stop_button = ft.FilledButton("Stop", disabled=True)
 
     file_picker = ft.FilePicker()
-    page.services.append(file_picker)
 
     def set_running(running: bool):
         status_text.value = "Running" if running else "Stopped"
@@ -274,6 +273,7 @@ def build_view(page: ft.Page) -> ft.View:
         padding=0,
         horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
         controls=[build_layout(page, content)],
+        services=[file_picker],
     )
 
 
