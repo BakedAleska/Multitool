@@ -24,6 +24,7 @@ from multitool.state import (  # noqa: E402
 from multitool.theme import build_theme  # noqa: E402
 from multitool.ui.accounts import AccountsView  # noqa: E402
 from multitool.ui.dashboard import DashboardView  # noqa: E402
+from multitool.ui.layout import restore_nav_scroll  # noqa: E402
 from multitool.ui.settings import SettingsView  # noqa: E402
 from multitool.ui.widgets import WidgetsView  # noqa: E402
 from multitool.widgets.loader import get_enabled_widgets  # noqa: E402
@@ -112,6 +113,7 @@ def main(page: ft.Page):
             page.views.append(DashboardView(page))
 
         page.update()
+        page.run_task(restore_nav_scroll, page)
 
     def view_pop(view):
         """Handle a back-navigation: drop the top view and re-sync the route."""
