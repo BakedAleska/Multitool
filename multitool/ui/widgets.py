@@ -7,7 +7,19 @@ import flet as ft
 from multitool.devtools import dev_registry_path, dev_widgets_dir
 from multitool.state import get_disabled_widgets, remove_widget_settings, set_widget_enabled
 from multitool.ui.layout import build_layout, widget_route
-from multitool.ui.style import SWITCH_SCALE, card_border, radius_card, scroll_margin, scroll_padding
+from multitool.ui.style import (
+    SPACE_LG,
+    SPACE_MD,
+    SPACE_SM,
+    SWITCH_SCALE,
+    card_border,
+    radius_card,
+    scroll_margin,
+    scroll_padding,
+    text_caption,
+    text_section,
+    text_title,
+)
 from multitool.ui.toast import show_confirm_toast, show_toast
 from multitool.widgets.catalog import (
     CatalogEntry,
@@ -320,7 +332,7 @@ def WidgetsView(page: ft.Page) -> ft.View:
                     ft.Container(height=42),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=8,
+                spacing=SPACE_SM,
             ),
             expand=True,
             padding=CARD_PADDING,
@@ -400,7 +412,7 @@ def WidgetsView(page: ft.Page) -> ft.View:
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
                 ],
-                spacing=8,
+                spacing=SPACE_SM,
             ),
             left=CARD_PADDING,
             right=CARD_PADDING,
@@ -555,9 +567,7 @@ def WidgetsView(page: ft.Page) -> ft.View:
     catalogue_entries = [e for e in all_entries if e.id not in local_ids]
 
     if not catalogue_fetched:
-        catalogue_content: ft.Control = ft.Text(
-            "Loading…", italic=True, size=12, color=ft.Colors.ON_SURFACE_VARIANT
-        )
+        catalogue_content: ft.Control = text_caption("Loading…", italic=True)
     elif catalogue_error:
         catalogue_content = ft.Text(
             f"Couldn't reach the catalogue. Is your connection working? ({catalogue_error})",
@@ -568,19 +578,17 @@ def WidgetsView(page: ft.Page) -> ft.View:
         catalogue_content = ft.Row(
             [build_catalogue_square(e) for e in catalogue_entries],
             scroll=ft.ScrollMode.AUTO,
-            spacing=12,
+            spacing=SPACE_MD,
         )
     else:
-        catalogue_content = ft.Text(
-            "No new widgets available.", italic=True, size=12, color=ft.Colors.ON_SURFACE_VARIANT
-        )
+        catalogue_content = text_caption("No new widgets available.", italic=True)
 
     catalogue_banner = ft.Column(
         [
-            ft.Text("Catalogue", size=14, weight=ft.FontWeight.W_600),
+            text_section("Catalogue"),
             catalogue_content,
         ],
-        spacing=8,
+        spacing=SPACE_SM,
     )
 
     if widgets:
@@ -588,17 +596,16 @@ def WidgetsView(page: ft.Page) -> ft.View:
             [build_installed_square(w) for w in widgets],
             runs_count=INSTALLED_PER_ROW,
             child_aspect_ratio=1.0,
-            spacing=12,
-            run_spacing=12,
+            spacing=SPACE_MD,
+            run_spacing=SPACE_MD,
             expand=True,
             padding=scroll_padding(),
         )
     else:
-        installed_content = ft.Text(
+        installed_content = text_caption(
             "No widgets installed. Install one from the Catalogue above, or add one "
             "manually from Settings.",
             italic=True,
-            color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
     installed_section = ft.Container(
@@ -621,10 +628,10 @@ def WidgetsView(page: ft.Page) -> ft.View:
 
     content = ft.Column(
         [
-            ft.Text("Widgets", size=24, weight=ft.FontWeight.BOLD),
+            text_title("Widgets"),
             *body,
         ],
-        spacing=16,
+        spacing=SPACE_LG,
         expand=True,
         scroll=ft.ScrollMode.AUTO,
         margin=scroll_margin(),

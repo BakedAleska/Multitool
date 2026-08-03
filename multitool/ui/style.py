@@ -29,6 +29,46 @@ SWITCH_SCALE = 0.8
 compact control next to a settings row instead of Flutter's oversized
 default."""
 
+SPACE_XS = 4
+"""Spacing between a label and its own caption directly beneath it."""
+
+SPACE_SM = 8
+"""Spacing between closely related controls in a row, or list item
+spacing in compact mode."""
+
+SPACE_MD = 12
+"""Default row/column spacing. The most common gap in the app - reach
+for this first."""
+
+SPACE_LG = 16
+"""Spacing between distinct sections on the same screen."""
+
+SPACE_XL = 24
+"""Spacing for a hero card's internal breathing room. Rare - most
+spacing should use a smaller step."""
+
+
+def text_title(value: str, **kwargs: object) -> ft.Text:
+    """A view's own title, e.g. "Dashboard" or "Settings". One per screen,
+    always the first thing on it.
+    """
+    return ft.Text(value, size=24, weight=ft.FontWeight.BOLD, **kwargs)
+
+
+def text_section(value: str, **kwargs: object) -> ft.Text:
+    """A titled group inside a screen, e.g. "Appearance" or "Danger Zone"."""
+    return ft.Text(value, size=14, weight=ft.FontWeight.W_600, **kwargs)
+
+
+def text_label(value: str, **kwargs: object) -> ft.Text:
+    """A single control's own name, e.g. "Show avatars" next to its switch."""
+    return ft.Text(value, size=14, weight=ft.FontWeight.W_500, **kwargs)
+
+
+def text_caption(value: str, **kwargs: object) -> ft.Text:
+    """Muted helper or secondary text under a label or section."""
+    return ft.Text(value, size=12, color=ft.Colors.ON_SURFACE_VARIANT, **kwargs)
+
 FORM_FIELD_HEIGHT = 120
 """Height for a settings screen's larger text input boxes, such as the
 Install a Theme paste box and the Place ID field, so the two read as

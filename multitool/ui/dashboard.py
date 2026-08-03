@@ -10,7 +10,18 @@ from multitool.state import get_compact_mode, get_show_avatars, get_sort_order
 from multitool.ui.accounts import sort_accounts
 from multitool.ui.join_action import join_with_account
 from multitool.ui.layout import build_layout
-from multitool.ui.style import card_border, radius_hero
+from multitool.ui.style import (
+    SPACE_LG,
+    SPACE_MD,
+    SPACE_SM,
+    SPACE_XL,
+    SPACE_XS,
+    card_border,
+    radius_hero,
+    text_caption,
+    text_section,
+    text_title,
+)
 from multitool.widgets.loader import get_enabled_widgets
 
 logger = get_logger(__name__)
@@ -73,11 +84,11 @@ def _build_hero(page: ft.Page, account: dict, show_avatars: bool) -> ft.Control:
     row_controls.append(
         ft.Column(
             [
-                ft.Text("Continue as", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                text_caption("Continue as"),
                 ft.Text(_display_name(account), size=20, weight=ft.FontWeight.BOLD),
-                ft.Text(subtitle, size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                text_caption(subtitle),
             ],
-            spacing=2,
+            spacing=SPACE_XS,
             expand=True,
         )
     )
@@ -91,8 +102,10 @@ def _build_hero(page: ft.Page, account: dict, show_avatars: bool) -> ft.Control:
     )
 
     return ft.Container(
-        content=ft.Row(row_controls, spacing=16, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=20,
+        content=ft.Row(
+            row_controls, spacing=SPACE_LG, vertical_alignment=ft.CrossAxisAlignment.CENTER
+        ),
+        padding=SPACE_XL,
         border=card_border(),
         border_radius=radius_hero(page),
     )
@@ -110,13 +123,9 @@ def _build_empty_hero(page: ft.Page) -> ft.Control:
                 ft.Column(
                     [
                         ft.Text("No accounts added yet", size=20, weight=ft.FontWeight.BOLD),
-                        ft.Text(
-                            "Add a Roblox account to get started.",
-                            size=12,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
+                        text_caption("Add a Roblox account to get started."),
                     ],
-                    spacing=2,
+                    spacing=SPACE_XS,
                     expand=True,
                 ),
                 ft.FilledButton(
@@ -127,7 +136,7 @@ def _build_empty_hero(page: ft.Page) -> ft.Control:
             ],
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         ),
-        padding=20,
+        padding=SPACE_XL,
         border=card_border(),
         border_radius=radius_hero(page),
     )
@@ -158,10 +167,10 @@ def _build_account_row_card(
 
     return ft.Container(
         content=ft.Column(
-            column_controls, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6
+            column_controls, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=SPACE_SM
         ),
         width=ROW_CARD_WIDTH,
-        padding=ft.Padding.symmetric(vertical=6),
+        padding=ft.Padding.symmetric(vertical=SPACE_SM),
         tooltip=f"Join as {_display_name(account)}",
         on_click=lambda e, a=account: page.run_task(join_with_account, page, a),
     )
@@ -175,12 +184,12 @@ def _widget_chip(page: ft.Page, widget_id: str, tile) -> ft.Control:
         logger.exception("Widget '%s' dashboard tile '%s' failed to build", widget_id, tile.id)
         return ft.Container(width=0, height=0)
 
-    return ft.Container(content=content, padding=ft.Padding.symmetric(horizontal=4))
+    return ft.Container(content=content, padding=ft.Padding.symmetric(horizontal=SPACE_XS))
 
 
 def _stat_chip(text: str) -> ft.Control:
     """Muted, unboxed text, for the account and widget counts."""
-    return ft.Text(text, size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+    return text_caption(text)
 
 
 def DashboardView(page: ft.Page) -> ft.View:
@@ -195,7 +204,7 @@ def DashboardView(page: ft.Page) -> ft.View:
     show_avatars = get_show_avatars(page)
     enabled_widgets = get_enabled_widgets(page)
 
-    body: list[ft.Control] = [ft.Text("Dashboard", size=24, weight=ft.FontWeight.BOLD)]
+    body: list[ft.Control] = [text_title("Dashboard")]
 
     if not accounts:
         body.append(_build_empty_hero(page))
@@ -210,7 +219,7 @@ def DashboardView(page: ft.Page) -> ft.View:
 
         row_avatar_size = COMPACT_ROW_AVATAR_SIZE if get_compact_mode(page) else ROW_AVATAR_SIZE
         sorted_accounts = sort_accounts(accounts, get_sort_order(page))
-        body.append(ft.Text("Your Accounts", size=14, weight=ft.FontWeight.W_600))
+        body.append(text_section("Your Accounts"))
         body.append(
             ft.Row(
                 [
@@ -218,7 +227,7 @@ def DashboardView(page: ft.Page) -> ft.View:
                     for a in sorted_accounts
                 ],
                 scroll=ft.ScrollMode.AUTO,
-                spacing=10,
+                spacing=SPACE_MD,
             )
         )
 
@@ -242,9 +251,9 @@ def DashboardView(page: ft.Page) -> ft.View:
         stat_chips.extend(_widget_chip(page, widget.id, tile) for tile in tiles)
 
     body.append(ft.Divider())
-    body.append(ft.Row(stat_chips, spacing=4, wrap=True, run_spacing=4))
+    body.append(ft.Row(stat_chips, spacing=SPACE_XS, wrap=True, run_spacing=SPACE_XS))
 
-    content = ft.Column(body, spacing=16, expand=True)
+    content = ft.Column(body, spacing=SPACE_LG, expand=True)
 
     return ft.View(
         route="/",

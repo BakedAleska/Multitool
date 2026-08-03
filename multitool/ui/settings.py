@@ -41,10 +41,18 @@ from multitool.theme import build_theme, parse_theme_input
 from multitool.ui.layout import build_layout
 from multitool.ui.style import (
     FORM_FIELD_HEIGHT,
+    SPACE_LG,
+    SPACE_MD,
+    SPACE_SM,
+    SPACE_XS,
     SWITCH_SCALE,
     card_border,
     radius_card,
     scroll_padding,
+    text_caption,
+    text_label,
+    text_section,
+    text_title,
     thin_button_style,
 )
 from multitool.ui.toast import show_toast
@@ -294,7 +302,7 @@ def SettingsView(page: ft.Page) -> ft.View:
         installed_theme_rows.append(
             ft.Row(
                 [
-                    ft.Text(theme["name"], expand=True),
+                    text_label(theme["name"], expand=True),
                     ft.IconButton(
                         icon=ft.Icons.DELETE_OUTLINE,
                         icon_size=18,
@@ -316,15 +324,9 @@ def SettingsView(page: ft.Page) -> ft.View:
     update_error = page.session.store.get(_UPDATE_ERROR_KEY)
 
     if update_downloading:
-        update_status: ft.Control = ft.Text(
-            f"Downloading version {update_info.version}…",
-            size=12,
-            color=ft.Colors.ON_SURFACE_VARIANT,
-        )
+        update_status: ft.Control = text_caption(f"Downloading version {update_info.version}…")
     elif update_checking:
-        update_status = ft.Text(
-            "Checking for updates…", size=12, color=ft.Colors.ON_SURFACE_VARIANT
-        )
+        update_status = text_caption("Checking for updates…")
     elif update_error:
         update_status = ft.Text(update_error, size=12, color=ft.Colors.ERROR)
     elif update_info:
@@ -332,9 +334,7 @@ def SettingsView(page: ft.Page) -> ft.View:
             f"Version {update_info.version} is available.", size=12, color=ft.Colors.PRIMARY
         )
     elif update_checked:
-        update_status = ft.Text(
-            "You're on the latest version.", size=12, color=ft.Colors.ON_SURFACE_VARIANT
-        )
+        update_status = text_caption("You're on the latest version.")
     else:
         update_status = ft.Text("", size=12)
 
@@ -357,13 +357,13 @@ def SettingsView(page: ft.Page) -> ft.View:
 
     updates_section = (
         [
-            ft.Text("Updates", weight=ft.FontWeight.W_500),
-            ft.Text(f"You're running version {APP_VERSION}.", size=12),
+            text_section("Updates"),
+            text_caption(f"You're running version {APP_VERSION}."),
             update_status,
-            ft.Row(update_buttons, spacing=8),
-            ft.Container(height=8),
+            ft.Row(update_buttons, spacing=SPACE_SM),
+            ft.Container(height=SPACE_SM),
             ft.Divider(height=1, thickness=1, color=ft.Colors.OUTLINE_VARIANT),
-            ft.Container(height=8),
+            ft.Container(height=SPACE_SM),
         ]
         if sys.platform == "win32"
         else []
@@ -374,15 +374,13 @@ def SettingsView(page: ft.Page) -> ft.View:
         log_visible = bool(page.session.store.get(_DEV_LOG_VISIBLE_KEY))
         widgets_dir = dev_widgets_dir()
         dev_mode_controls = [
-            ft.Text("Developer tools", weight=ft.FontWeight.W_500),
-            ft.Text(
+            text_section("Developer tools"),
+            text_caption(
                 "Running from a source checkout, so widgets are also "
                 f"loaded straight from {widgets_dir or 'this repo'}, and "
                 "the Catalogue reads this repo's own registry.json - no "
                 "install step, no push, needed to see a change. See "
-                "CLAUDE.md's Developer mode section.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "CLAUDE.md's Developer mode section."
             ),
             ft.Row(
                 [
@@ -397,18 +395,13 @@ def SettingsView(page: ft.Page) -> ft.View:
                         style=thin_button_style(),
                     ),
                 ],
-                spacing=8,
+                spacing=SPACE_SM,
             ),
             *(
                 [
                     ft.Row(
                         [
-                            ft.Text(
-                                "Log (last 300 lines)",
-                                size=12,
-                                weight=ft.FontWeight.W_500,
-                                expand=True,
-                            ),
+                            text_label("Log (last 300 lines)", expand=True),
                             ft.IconButton(
                                 icon=ft.Icons.COPY,
                                 icon_size=16,
@@ -430,7 +423,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                             scroll=ft.ScrollMode.AUTO,
                         ),
                         height=220,
-                        padding=8,
+                        padding=SPACE_SM,
                         bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
                         border=card_border(),
                         border_radius=radius_card(page),
@@ -443,7 +436,7 @@ def SettingsView(page: ft.Page) -> ft.View:
 
     general_tab = ft.ListView(
         controls=[
-            ft.Text("Sidebar position", weight=ft.FontWeight.W_500),
+            text_section("Sidebar position"),
             ft.RadioGroup(
                 value=get_nav_position(page),
                 on_change=on_position_change,
@@ -454,7 +447,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                     ]
                 ),
             ),
-            ft.Text("Appearance", weight=ft.FontWeight.W_500),
+            text_section("Appearance"),
             ft.RadioGroup(
                 value=appearance_value,
                 on_change=on_theme_mode_change,
@@ -462,27 +455,25 @@ def SettingsView(page: ft.Page) -> ft.View:
             ),
             *(
                 [
-                    ft.Text("Installed Themes", weight=ft.FontWeight.W_500),
-                    ft.Column(installed_theme_rows, spacing=4),
+                    text_section("Installed Themes"),
+                    ft.Column(installed_theme_rows, spacing=SPACE_XS),
                 ]
                 if installed_theme_rows
                 else []
             ),
             *(
                 [
-                    ft.Text("Startup", weight=ft.FontWeight.W_500),
+                    text_section("Startup"),
                     ft.Row(
                         [
                             ft.Column(
                                 [
-                                    ft.Text("Open on launch", weight=ft.FontWeight.W_500),
-                                    ft.Text(
-                                        "Start Multitool automatically when you log in.",
-                                        size=12,
-                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                    text_label("Open on launch"),
+                                    text_caption(
+                                        "Start Multitool automatically when you log in."
                                     ),
                                 ],
-                                spacing=2,
+                                spacing=SPACE_XS,
                                 expand=True,
                             ),
                             ft.Switch(
@@ -503,16 +494,14 @@ def SettingsView(page: ft.Page) -> ft.View:
                         [
                             ft.Column(
                                 [
-                                    ft.Text("Run in background", weight=ft.FontWeight.W_500),
-                                    ft.Text(
+                                    text_label("Run in background"),
+                                    text_caption(
                                         "Closing the window keeps Multitool running in the "
                                         "hidden icons section instead of closing it. Quit "
-                                        "from there to close it fully.",
-                                        size=12,
-                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                        "from there to close it fully."
                                     ),
                                 ],
-                                spacing=2,
+                                spacing=SPACE_XS,
                                 expand=True,
                             ),
                             ft.Switch(
@@ -528,44 +517,33 @@ def SettingsView(page: ft.Page) -> ft.View:
                 else []
             ),
             *updates_section,
-            ft.Text("Install a Theme", weight=ft.FontWeight.W_500),
-            ft.Text(
+            text_section("Install a Theme"),
+            text_caption(
                 "Paste a theme's JSON, or a link to one, to set a name, colors, "
                 "corner rounding, a font, and a background image. Installing "
-                "adds it to Appearance above.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "adds it to Appearance above."
             ),
             theme_field,
             ft.FilledButton("Install", on_click=on_install_theme, style=thin_button_style()),
-            ft.Container(height=8),
+            ft.Container(height=SPACE_SM),
             ft.Divider(height=1, thickness=1, color=ft.Colors.OUTLINE_VARIANT),
-            ft.Container(height=8),
-            ft.Text(
-                "Danger Zone",
-                weight=ft.FontWeight.W_500,
-                color=ft.Colors.ERROR,
-            ),
+            ft.Container(height=SPACE_SM),
+            text_section("Danger Zone", color=ft.Colors.ERROR),
             *(
                 [
                     ft.Row(
                         [
                             ft.Column(
                                 [
-                                    ft.Text(
-                                        "Allow multiple Roblox instances",
-                                        weight=ft.FontWeight.W_500,
-                                    ),
-                                    ft.Text(
+                                    text_label("Allow multiple Roblox instances"),
+                                    text_caption(
                                         "Lets Join open a second Roblox window "
                                         "instead of just switching to one that's "
                                         "already open, so more than one account "
-                                        "can play at once.",
-                                        size=12,
-                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                        "can play at once."
                                     ),
                                 ],
-                                spacing=2,
+                                spacing=SPACE_XS,
                                 expand=True,
                             ),
                             ft.Switch(
@@ -582,7 +560,7 @@ def SettingsView(page: ft.Page) -> ft.View:
             ),
             *dev_mode_controls,
         ],
-        spacing=12,
+        spacing=SPACE_MD,
         expand=True,
         padding=scroll_padding(),
         on_scroll=on_tab_scroll("general"),
@@ -595,14 +573,10 @@ def SettingsView(page: ft.Page) -> ft.View:
                 [
                     ft.Column(
                         [
-                            ft.Text("Show avatars", weight=ft.FontWeight.W_500),
-                            ft.Text(
-                                "Show each account's avatar in the list.",
-                                size=12,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                            ),
+                            text_label("Show avatars"),
+                            text_caption("Show each account's avatar in the list."),
                         ],
-                        spacing=2,
+                        spacing=SPACE_XS,
                         expand=True,
                     ),
                     ft.Switch(
@@ -616,14 +590,12 @@ def SettingsView(page: ft.Page) -> ft.View:
                 [
                     ft.Column(
                         [
-                            ft.Text("Compact mode", weight=ft.FontWeight.W_500),
-                            ft.Text(
-                                "Hide notes in the accounts list for a more compact view.",
-                                size=12,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            text_label("Compact mode"),
+                            text_caption(
+                                "Hide notes in the accounts list for a more compact view."
                             ),
                         ],
-                        spacing=2,
+                        spacing=SPACE_XS,
                         expand=True,
                     ),
                     ft.Switch(
@@ -633,7 +605,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                     ),
                 ],
             ),
-            ft.Text("Sort order", weight=ft.FontWeight.W_500),
+            text_section("Sort order"),
             ft.RadioGroup(
                 value=get_sort_order(page),
                 on_change=on_sort_order_change,
@@ -645,12 +617,10 @@ def SettingsView(page: ft.Page) -> ft.View:
                     ]
                 ),
             ),
-            ft.Text("Place ID", weight=ft.FontWeight.W_500),
-            ft.Text(
+            text_section("Place ID"),
+            text_caption(
                 "The place that opens when you press Join. Paste a roblox.com game "
-                "link, or just the numeric ID.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "link, or just the numeric ID."
             ),
             ft.TextField(
                 value=get_place_id(page),
@@ -660,7 +630,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                 height=FORM_FIELD_HEIGHT,
             ),
         ],
-        spacing=12,
+        spacing=SPACE_MD,
         expand=True,
         padding=scroll_padding(),
         on_scroll=on_tab_scroll("accounts"),
@@ -686,7 +656,7 @@ def SettingsView(page: ft.Page) -> ft.View:
         if widget.build_settings is None and widget.on_app_start is None:
             continue
         section_controls: list[ft.Control] = [
-            ft.Text(widget.name, size=16, weight=ft.FontWeight.W_600),
+            text_section(widget.name),
         ]
         if widget.on_app_start is not None:
             section_controls.append(
@@ -694,15 +664,13 @@ def SettingsView(page: ft.Page) -> ft.View:
                     [
                         ft.Column(
                             [
-                                ft.Text("Start on launch", weight=ft.FontWeight.W_500),
-                                ft.Text(
+                                text_label("Start on launch"),
+                                text_caption(
                                     f"Start {widget.name} automatically when Multitool "
-                                    "launches.",
-                                    size=12,
-                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                    "launches."
                                 ),
                             ],
-                            spacing=2,
+                            spacing=SPACE_XS,
                             expand=True,
                         ),
                         ft.Switch(
@@ -718,8 +686,8 @@ def SettingsView(page: ft.Page) -> ft.View:
             section_controls.append(widget.build_settings(page))
         widget_settings_sections.append(
             ft.Container(
-                content=ft.Column(section_controls, spacing=12),
-                padding=12,
+                content=ft.Column(section_controls, spacing=SPACE_MD),
+                padding=SPACE_MD,
                 border=(
                     ft.Border.all(2, ft.Colors.PRIMARY)
                     if widget.id == focus_widget_id
@@ -731,12 +699,10 @@ def SettingsView(page: ft.Page) -> ft.View:
 
     widgets_tab = ft.ListView(
         controls=[
-            ft.Text(
+            text_caption(
                 "Widgets are optional and not bundled with the app. To add one "
                 "manually, place its folder here. Install and enable them from the "
-                "Widgets screen.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "Widgets screen."
             ),
             ft.Row(
                 [
@@ -751,7 +717,7 @@ def SettingsView(page: ft.Page) -> ft.View:
             ),
             *widget_settings_sections,
         ],
-        spacing=16,
+        spacing=SPACE_LG,
         expand=True,
         padding=scroll_padding(),
         on_scroll=on_tab_scroll("widgets"),
@@ -769,7 +735,7 @@ def SettingsView(page: ft.Page) -> ft.View:
 
     content = ft.Column(
         [
-            ft.Text("Settings", size=24, weight=ft.FontWeight.BOLD),
+            text_title("Settings"),
             ft.Tabs(
                 length=3,
                 selected_index=2 if focus_widget_id else 0,
@@ -789,17 +755,17 @@ def SettingsView(page: ft.Page) -> ft.View:
                             controls=[
                                 ft.Container(
                                     content=general_tab,
-                                    padding=ft.Padding.only(top=16),
+                                    padding=ft.Padding.only(top=SPACE_LG),
                                     expand=True,
                                 ),
                                 ft.Container(
                                     content=accounts_tab,
-                                    padding=ft.Padding.only(top=16),
+                                    padding=ft.Padding.only(top=SPACE_LG),
                                     expand=True,
                                 ),
                                 ft.Container(
                                     content=widgets_tab,
-                                    padding=ft.Padding.only(top=16),
+                                    padding=ft.Padding.only(top=SPACE_LG),
                                     expand=True,
                                 ),
                             ],
