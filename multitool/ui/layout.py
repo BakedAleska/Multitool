@@ -84,7 +84,7 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         spacing=4,
                     ),
-                    padding=ft.Padding.symmetric(vertical=8),
+                    padding=ft.Padding.symmetric(vertical=8, horizontal=4),
                     border_radius=radius_card(page),
                     bgcolor=ft.Colors.SECONDARY_CONTAINER if selected else None,
                     on_click=lambda e, wid=widget.id: page.run_task(go_to_widget, wid),

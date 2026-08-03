@@ -225,8 +225,10 @@ def DashboardView(page: ft.Page) -> ft.View:
     account_count = len(accounts)
     widget_count = len(enabled_widgets)
     stat_chips: list[ft.Control] = [
-        _stat_chip(f"{account_count} account{'s' if account_count != 1 else ''}"),
-        _stat_chip(f"{widget_count} widget{'s' if widget_count != 1 else ''} installed"),
+        _stat_chip(
+            f"{account_count} account{'s' if account_count != 1 else ''}, "
+            f"{widget_count} widget{'s' if widget_count != 1 else ''} installed"
+        ),
     ]
 
     for widget in enabled_widgets:
