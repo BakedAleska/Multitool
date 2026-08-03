@@ -47,6 +47,19 @@ pyright
 
 The Sphinx API documentation lives on the `docs` branch, not `main`.
 
+## Preparing for beta
+
+This project is preparing for its first beta release. Two things follow
+from that:
+
+- Every change should be verified and cross-checked against the existing
+  codebase before it's written. Check whether a problem is already solved
+  somewhere in the app rather than adding a roundabout new solution next
+  to an existing one.
+- The three widgets shipping with the beta are Autohotkey, Autoclicker,
+  and Image Overlay. The Rogue Lineage widget in `widgets/rogue_lineage/`
+  is for personal use only and isn't part of the beta release.
+
 ## Widget development
 
 An installed widget (under `WIDGETS_DIR`, see Settings -> Widgets for the
