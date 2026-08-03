@@ -3,6 +3,14 @@
 Docs are built from docstrings via ``sphinx.ext.autodoc``. Run
 ``sphinx-apidoc`` and ``sphinx-build`` as described in the project's
 CLAUDE.md whenever modules are added, removed, or renamed.
+
+``exclude_patterns`` drops sphinx-apidoc's own aggregator pages
+(``multitool namespace``, ``multitool.data namespace``, and so on) from
+the build. Their navigation is replaced by the hand-written group pages
+(``core.rst``, ``data.rst``, ``roblox.rst``, ``ui.rst``, ``widgets.rst``),
+which give the sidebar readable labels instead of dotted module paths.
+Re-running sphinx-apidoc regenerates the excluded files but never touches
+the hand-written ones, so this stays correct across reruns.
 """
 
 import os
@@ -21,7 +29,17 @@ extensions = [
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = [
+    "_build",
+    "Thumbs.db",
+    ".DS_Store",
+    "api/modules.rst",
+    "api/multitool.rst",
+    "api/multitool.data.rst",
+    "api/multitool.roblox.rst",
+    "api/multitool.ui.rst",
+    "api/multitool.widgets.rst",
+]
 
 autodoc_default_options = {
     "members": True,

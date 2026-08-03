@@ -62,13 +62,15 @@ The rest of the UI and shared app infrastructure.
 * :doc:`api/multitool.theme`: parse and apply a user-supplied theme.
 * :doc:`api/multitool.config`: per-OS data directory and shared URLs.
 * :doc:`api/multitool.logs`: file-based logging shared by every part of the app.
-
-Full API reference
--------------------
-
-Every module, alphabetically, if you already know what you're looking for.
+* :doc:`api/multitool.updater`: check GitHub Releases for a newer build and hand off to the installer.
+* :doc:`api/multitool.version`: the app's own version.
 
 .. toctree::
    :maxdepth: 2
+   :hidden:
 
-   api/modules
+   core
+   data
+   roblox
+   ui
+   widgets

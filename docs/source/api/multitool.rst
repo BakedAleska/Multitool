@@ -25,3 +25,5 @@ Submodules
    multitool.logs
    multitool.state
    multitool.theme
+   multitool.updater
+   multitool.version
