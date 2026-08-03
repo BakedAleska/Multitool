@@ -74,6 +74,41 @@ of the base interval in either direction."""
 DEFAULT_SHOW_INDICATOR = True
 DEFAULT_RANDOMIZE_TIMING = True
 
+DEFAULT_SPEED_UNIT = "cps"
+MS_MIN = round(1000 / CPS_MAX)
+MS_MAX = round(1000 / CPS_MIN)
+"""Whether the speed field reads in clicks-per-second or interval-in-
+milliseconds is a per-user preference (see Settings), not something the
+Autoclicker screen itself needs to ask about every time it opens. Speed
+is still stored canonically as CPS either way - see _cps_to_ms/_ms_to_cps -
+so switching the preference doesn't lose or rescale a saved default."""
+
+
+def _cps_to_ms(cps: int) -> int:
+    return round(1000 / cps)
+
+
+def _ms_to_cps(ms: int) -> int:
+    return max(CPS_MIN, min(CPS_MAX, round(1000 / ms)))
+
+
+def _clamp_speed_input(raw: str, unit: str) -> int:
+    """Parse a speed field's raw text, in the given unit, into canonical CPS."""
+    try:
+        value = int(raw)
+    except ValueError:
+        value = MS_MIN if unit == "ms" else DEFAULT_CPS
+    if unit == "ms":
+        return _ms_to_cps(max(MS_MIN, min(MS_MAX, value)))
+    return max(CPS_MIN, min(CPS_MAX, value))
+
+
+def _speed_field_props(unit: str, cps: int) -> tuple[str, str, str]:
+    """(label, helper text, field value) for the speed field, in the given unit."""
+    if unit == "ms":
+        return "Interval (ms)", f"{MS_MIN}-{MS_MAX}", str(_cps_to_ms(cps))
+    return "Clicks per second", f"{CPS_MIN}-{CPS_MAX}", str(cps)
+
 _FUNCTION_KEY_RE = re.compile(r"^F([1-9]|1[0-9]|2[0-4])$")
 
 _SPECIAL_KEY_MAP = {
@@ -202,43 +237,9 @@ def _overlay_command() -> list[str]:
     return [sys.executable, str(BACKEND_DIR / "overlay.py")]
 
 
-async def _start_on_app_launch(page: ft.Page) -> None:
-    """Start clicking automatically at app launch, using saved defaults.
-
-    Wired up as Widget.on_app_start, so it only runs if the user turned
-    on this widget's "Start on launch" toggle under Settings -> Widgets.
-    Mirrors build_view's start_clicking(), but runs before any view
-    exists to read live field values from, so it reads the same saved
-    defaults build_view itself initializes those fields from. build_view
-    picks up the already-running process the next time it's opened (see
-    its own already_running check) instead of showing a stale "Stopped".
-    """
-    if page.session.store.get(_CLICK_PROCESS_KEY) is not None:
-        return
-    default_cps = get_widget_setting(page, WIDGET_ID, "default_cps", DEFAULT_CPS)
-    cps = max(CPS_MIN, min(CPS_MAX, int(default_cps)))
-    button = get_widget_setting(page, WIDGET_ID, "default_button", DEFAULT_BUTTON)
-    randomize_timing = get_widget_setting(
-        page, WIDGET_ID, "randomize_timing", DEFAULT_RANDOMIZE_TIMING
-    )
-    show_indicator = get_widget_setting(page, WIDGET_ID, "show_indicator", DEFAULT_SHOW_INDICATOR)
-
-    def on_exit(code: int):
-        page.session.store.set(_CLICK_PROCESS_KEY, None)
-
-    command = _click_backend_command(cps, button, randomize_timing)
-    widget_process = await start_process(page, *command, on_exit=on_exit)
-    page.session.store.set(_CLICK_PROCESS_KEY, widget_process)
-
-    if show_indicator:
-        overlay_process = await start_process(page, *_overlay_command())
-        page.session.store.set(_OVERLAY_PROCESS_KEY, overlay_process)
-
-
 def build_view(page: ft.Page) -> ft.View:
-    """The Autoclicker's own screen: CPS, button, keybinds, indicator."""
-    default_cps = get_widget_setting(page, WIDGET_ID, "default_cps", DEFAULT_CPS)
-    default_button = get_widget_setting(page, WIDGET_ID, "default_button", DEFAULT_BUTTON)
+    """The Autoclicker's own screen: speed, button, keybinds, indicator."""
+    speed_unit = get_widget_setting(page, WIDGET_ID, "speed_unit", DEFAULT_SPEED_UNIT)
     show_indicator = get_widget_setting(page, WIDGET_ID, "show_indicator", DEFAULT_SHOW_INDICATOR)
     randomize_timing = get_widget_setting(
         page, WIDGET_ID, "randomize_timing", DEFAULT_RANDOMIZE_TIMING
@@ -249,24 +250,24 @@ def build_view(page: ft.Page) -> ft.View:
     already_running = page.session.store.get(_CLICK_PROCESS_KEY) is not None
     """Whether a click process is already running when this view builds.
 
-    True when the "Start on launch" hook (_start_on_app_launch, below)
-    already started one before the user ever opened this screen. Every
-    control below starts from this instead of always assuming "Stopped",
-    so the screen doesn't show a stale Start button for a loop that's
-    actually already running.
+    True when a keybind started clicking while the user was on another
+    screen. Every control below starts from this instead of always
+    assuming "Stopped", so the screen doesn't show a stale Start button
+    for a loop that's actually already running.
     """
 
     status_text = ft.Text("Running" if already_running else "Stopped", weight=ft.FontWeight.W_600)
     count_text = ft.Text("Clicks: 0", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+    speed_label, speed_helper, speed_value = _speed_field_props(speed_unit, DEFAULT_CPS)
     cps_field = ft.TextField(
-        label="Clicks per second",
-        value=str(default_cps),
+        label=speed_label,
+        value=speed_value,
         width=160,
-        helper=f"{CPS_MIN}-{CPS_MAX}",
+        helper=speed_helper,
         disabled=already_running,
     )
     button_group = ft.RadioGroup(
-        value=default_button,
+        value=DEFAULT_BUTTON,
         disabled=already_running,
         content=ft.Row(
             [
@@ -292,13 +293,6 @@ def build_view(page: ft.Page) -> ft.View:
     capture_hint = ft.Text(
         "", size=12, weight=ft.FontWeight.W_600, color=ft.Colors.PRIMARY, visible=False
     )
-
-    def clamp_cps(raw: str) -> int:
-        try:
-            value = int(raw)
-        except ValueError:
-            value = DEFAULT_CPS
-        return max(CPS_MIN, min(CPS_MAX, value))
 
     def set_running(running: bool):
         status_text.value = "Running" if running else "Stopped"
@@ -340,8 +334,8 @@ def build_view(page: ft.Page) -> ft.View:
         """
         if page.session.store.get(_CLICK_PROCESS_KEY) is not None:
             return
-        cps = clamp_cps(cps_field.value)
-        cps_field.value = str(cps)
+        cps = _clamp_speed_input(cps_field.value, speed_unit)
+        cps_field.value = _speed_field_props(speed_unit, cps)[2]
         button = button_group.value or DEFAULT_BUTTON
         command = _click_backend_command(cps, button, randomize_checkbox.value)
         widget_process = await start_process(
@@ -630,45 +624,38 @@ def build_view(page: ft.Page) -> ft.View:
 
 
 def build_settings(page: ft.Page) -> ft.Control:
-    """The Autoclicker's Settings section: defaults for CPS and button."""
+    """The Autoclicker's Settings section: speed unit.
 
-    def on_cps_blur(e: ft.Event[ft.TextField]):
-        try:
-            value = max(CPS_MIN, min(CPS_MAX, int(e.control.value or DEFAULT_CPS)))
-        except ValueError:
-            value = DEFAULT_CPS
-        e.control.value = str(value)
-        e.control.update()
-        set_widget_setting(page, WIDGET_ID, "default_cps", value)
+    Speed and click button are already fully set on the Autoclicker
+    screen itself each time it's used, so neither is a setting worth
+    duplicating here. Speed unit is: it's a display preference the
+    Autoclicker screen has no room to ask about every time it opens, for
+    whether its speed field works in clicks-per-second or interval-in-
+    milliseconds.
+    """
 
-    def on_button_change(e: ft.Event[ft.RadioGroup]):
-        set_widget_setting(page, WIDGET_ID, "default_button", e.control.value)
+    def on_speed_unit_change(e: ft.Event[ft.RadioGroup]):
+        if e.control.value is not None:
+            set_widget_setting(page, WIDGET_ID, "speed_unit", e.control.value)
 
-    default_cps = get_widget_setting(page, WIDGET_ID, "default_cps", DEFAULT_CPS)
-    default_button = get_widget_setting(page, WIDGET_ID, "default_button", DEFAULT_BUTTON)
+    speed_unit = get_widget_setting(page, WIDGET_ID, "speed_unit", DEFAULT_SPEED_UNIT)
 
     return ft.Column(
         [
+            ft.Text("Speed unit", weight=ft.FontWeight.W_500),
             ft.Text(
-                "The Autoclicker screen starts at these values each time it "
-                "opens.",
+                "Whether the Autoclicker screen's speed field works in "
+                "clicks-per-second or interval-in-milliseconds.",
                 size=12,
                 color=ft.Colors.ON_SURFACE_VARIANT,
             ),
-            ft.TextField(
-                label=f"Default CPS ({CPS_MIN}-{CPS_MAX})",
-                value=str(default_cps),
-                width=200,
-                on_blur=on_cps_blur,
-            ),
             ft.RadioGroup(
-                value=default_button,
-                on_change=on_button_change,
+                value=speed_unit,
+                on_change=on_speed_unit_change,
                 content=ft.Row(
                     [
-                        ft.Radio(value="left", label="Left click"),
-                        ft.Radio(value="middle", label="Middle click"),
-                        ft.Radio(value="right", label="Right click"),
+                        ft.Radio(value="cps", label="Clicks per second"),
+                        ft.Radio(value="ms", label="Interval (ms)"),
                     ]
                 ),
             ),
@@ -683,7 +670,6 @@ WIDGET = Widget(
     description="Clicks repeatedly at the cursor. Backend runs outside Python.",
     build_view=build_view,
     build_settings=build_settings,
-    on_app_start=_start_on_app_launch,
     icon=ft.Icons.MOUSE_OUTLINED,
     selected_icon=ft.Icons.MOUSE,
 )
