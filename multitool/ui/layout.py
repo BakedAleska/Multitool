@@ -4,6 +4,7 @@ from typing import NamedTuple
 
 import flet as ft
 
+from multitool.devtools import is_dev_environment
 from multitool.state import get_active_theme, get_nav_position, is_named_theme_active
 from multitool.theme import BACKGROUND_FIT_MAP
 from multitool.ui.style import SPACE_MD, SPACE_SM, SPACE_XS, radius_card
@@ -182,10 +183,33 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
     row = ft.Row(row_controls, expand=True, spacing=0)
 
     background_image = _background_image(page)
-    if background_image is None:
-        return row
+    root: ft.Control = ft.Stack([background_image, row], expand=True) if background_image else row
 
-    return ft.Stack([background_image, row], expand=True)
+    if not is_dev_environment():
+        return root
+
+    dev_badge = ft.Container(
+        content=ft.Container(
+            content=ft.Text(
+                "DEV",
+                size=10,
+                weight=ft.FontWeight.BOLD,
+                color=ft.Colors.ON_ERROR,
+            ),
+            bgcolor=ft.Colors.ERROR,
+            padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+            border_radius=6,
+            tooltip=(
+                "Running from a source checkout: widgets and the Catalogue "
+                "load straight from this repo instead of an installed copy. "
+                "See CLAUDE.md's Developer mode section."
+            ),
+        ),
+        right=8,
+        bottom=8,
+    )
+
+    return ft.Stack([root, dev_badge], expand=True)
 
 
 def _background_image(page: ft.Page) -> ft.Control | None:

@@ -6,6 +6,7 @@ import json
 import shutil
 import uuid
 import zipfile
+from pathlib import Path
 from typing import Optional
 
 import flet as ft
@@ -44,7 +45,15 @@ def install_widget(entry: CatalogEntry) -> None:
     multitool.widgets.loader.discover_widgets() ignores. The staging directory
     is only moved into place after the install fully succeeds, so a
     failed install never leaves a broken folder at WIDGETS_DIR/<id>.
+
+    A local: true entry (Developer Mode only, see WidgetSource) skips
+    all of this and copies straight from disk instead - see
+    _install_local.
     """
+    if entry.source.local:
+        _install_local(entry)
+        return
+
     url = f"https://github.com/{entry.source.owner}/{entry.source.repo}/archive/{entry.source.ref}.zip"
 
     try:
@@ -136,6 +145,44 @@ def install_widget(entry: CatalogEntry) -> None:
             shutil.rmtree(final_dir)
         shutil.move(str(staging_dir), str(final_dir))
         logger.info("Installed widget '%s' (version %s)", entry.id, entry.version)
+    finally:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+
+
+def _install_local(entry: CatalogEntry) -> None:
+    """Copy a local: true Catalogue entry straight from disk.
+
+    Developer Mode only: lets a widget's Catalogue install/update flow
+    be tested against a working copy on disk, uncommitted, rather than
+    a pushed commit. There's no archive to verify a checksum against, so
+    this skips hashing entirely - the whole point is to try code that
+    hasn't been pushed yet.
+    """
+    source_dir = Path(entry.source.path)
+    if not source_dir.is_dir():
+        raise WidgetInstallError(
+            f"Local widget source not found at {source_dir}. Did the path move?"
+        )
+    if not (source_dir / "widget.py").exists():
+        raise WidgetInstallError(f"{source_dir} has no widget.py. Is this the right folder?")
+
+    WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
+    staging_dir = WIDGETS_DIR / f".tmp_{entry.id}_{uuid.uuid4().hex}"
+
+    try:
+        shutil.copytree(
+            source_dir, staging_dir, ignore=shutil.ignore_patterns(".git", "__pycache__")
+        )
+
+        manifest = {"id": entry.id, "version": entry.version, "sha256": entry.sha256}
+        (staging_dir / INSTALL_MANIFEST_NAME).write_text(json.dumps(manifest, indent=2))
+
+        final_dir = WIDGETS_DIR / entry.id
+        if final_dir.exists():
+            shutil.rmtree(final_dir)
+        shutil.move(str(staging_dir), str(final_dir))
+        logger.info("Installed local widget '%s' from %s", entry.id, source_dir)
     finally:
         if staging_dir.exists():
             shutil.rmtree(staging_dir, ignore_errors=True)

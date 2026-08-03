@@ -4,6 +4,7 @@ import asyncio
 
 import flet as ft
 
+from multitool.devtools import dev_registry_path, dev_widgets_dir
 from multitool.state import get_disabled_widgets, remove_widget_settings, set_widget_enabled
 from multitool.ui.layout import build_layout, widget_route
 from multitool.ui.style import SWITCH_SCALE, card_border, radius_card, scroll_margin, scroll_padding
@@ -39,6 +40,17 @@ aren't enough widgets installed to fill a fixed-size row exactly."""
 CATALOGUE_SIZE = 104
 """Catalogue tiles are app-icon-style: tap to install, no controls, so
 they read like a smaller, denser shop shelf next to the installed grid."""
+
+INSTALLED_SECTION_TOP_GAP = 64
+"""Shrinks the installed-widgets section's forced height below the full
+window height, by this much. installed_section is held to a fixed
+height so scrolling can carry the Catalogue completely out of view (see
+WidgetsView's docstring) - but sizing it to the *entire* window let the
+scroll go one step further than that, past the point the Catalogue was
+already gone, and start eating into the installed grid's own rows from
+the top. Trimming the forced height by a fixed gap stops the scroll
+short of that, leaving this much breathing room above the installed
+grid at max scroll instead."""
 
 CARD_PADDING = 14
 ICON_CHIP_SIZE = 56
@@ -99,12 +111,13 @@ def WidgetsView(page: ft.Page) -> ft.View:
     guard matters: refresh() rebuilds this view, so an unconditional
     fetch here would trigger another fetch on every rebuild, without end.
 
-    The installed-widgets section is wrapped in a container held to the
-    full window height, even when it only has one short row of widgets
-    in it. That's deliberate: it guarantees there's always enough room
-    to scroll the Catalogue completely out of view above it, so the
-    first row of installed widgets can reach the top of the screen,
-    rather than the page only scrolling as far as its actual content.
+    The installed-widgets section is wrapped in a container held to
+    nearly the full window height (see INSTALLED_SECTION_TOP_GAP), even
+    when it only has one short row of widgets in it. That's deliberate:
+    it guarantees there's always enough room to scroll the Catalogue
+    completely out of view above it, so the first row of installed
+    widgets can reach near the top of the screen, rather than the page
+    only scrolling as far as its actual content.
     """
 
     def refresh():
@@ -167,16 +180,21 @@ def WidgetsView(page: ft.Page) -> ft.View:
         """Fetch the Catalogue, then refresh this view.
 
         See WidgetsView's docstring for the guard that keeps this from
-        running more than once per session.
+        running more than once per session. Running from a source
+        checkout, reads the repo's own registry.json instead of
+        WIDGET_REGISTRY_URL - see multitool.devtools.dev_registry_path.
         """
-        entries, error = await asyncio.to_thread(fetch_registry)
+        local_path = dev_registry_path()
+        entries, error = await asyncio.to_thread(
+            fetch_registry, str(local_path) if local_path else None
+        )
         if error is None:
             set_cached_registry(page, entries)
         page.session.store.set(_CATALOGUE_FETCHED_KEY, True)
         page.session.store.set(_CATALOGUE_ERROR_KEY, error)
         refresh()
 
-    widgets, load_errors = discover_widgets()
+    widgets, load_errors = discover_widgets(dev_widgets_dir())
     disabled_ids = set(get_disabled_widgets(page))
     local_ids = {w.id for w in widgets}
 
@@ -580,7 +598,7 @@ def WidgetsView(page: ft.Page) -> ft.View:
 
     installed_section = ft.Container(
         content=installed_content,
-        height=page.height or 600,
+        height=max((page.height or 600) - INSTALLED_SECTION_TOP_GAP, 0),
         alignment=ft.Alignment.TOP_LEFT,
     )
 

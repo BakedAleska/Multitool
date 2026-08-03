@@ -29,6 +29,12 @@ SWITCH_SCALE = 0.8
 compact control next to a settings row instead of Flutter's oversized
 default."""
 
+FORM_FIELD_HEIGHT = 120
+"""Height for a settings screen's larger text input boxes, such as the
+Install a Theme paste box and the Place ID field, so the two read as
+the same size instead of one dwarfing the other.
+"""
+
 SCROLL_GUTTER = 12
 """Space reserved on the trailing edge of every vertically scrolling
 list or column, so the scrollbar rendered there never sits on top of a

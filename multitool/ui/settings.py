@@ -7,6 +7,7 @@ import flet as ft
 
 from multitool import startup, tray
 from multitool.config import WIDGETS_DIR
+from multitool.devtools import dev_widgets_dir, is_dev_environment, reload_current_view, tail_log
 from multitool.roblox.join import extract_place_id
 from multitool.state import (
     BUILT_IN_THEME_MODES,
@@ -39,6 +40,7 @@ from multitool.state import (
 from multitool.theme import build_theme, parse_theme_input
 from multitool.ui.layout import build_layout
 from multitool.ui.style import (
+    FORM_FIELD_HEIGHT,
     SWITCH_SCALE,
     card_border,
     radius_card,
@@ -51,6 +53,8 @@ from multitool.version import APP_VERSION
 from multitool.widgets.loader import discover_widgets
 
 _SETTINGS_FOCUS_WIDGET_KEY = "_settings_focus_widget_id"
+_SETTINGS_SCROLL_KEY = "_settings_scroll_offsets"
+_DEV_LOG_VISIBLE_KEY = "_dev_log_visible"
 _UPDATE_CHECKING_KEY = "_update_checking"
 _UPDATE_CHECKED_KEY = "_update_checked"
 _UPDATE_DOWNLOADING_KEY = "_update_downloading"
@@ -93,6 +97,26 @@ def SettingsView(page: ft.Page) -> ft.View:
     def on_multi_instance_change(e: ft.Event[ft.Switch]):
         set_multi_instance(page, e.control.value)
 
+    def on_reload_widgets(e: ft.Event[ft.Button]):
+        """Force-rescan and reimport widgets, then rebuild the current view.
+
+        discover_widgets() always reimports fresh, so the rescan itself
+        needs no extra step here - this exists to give a visible,
+        on-demand trigger and confirmation, rather than waiting for the
+        next real navigation to notice a widget change.
+        """
+        reload_current_view(page)
+        show_toast(page, "Widgets reloaded.")
+
+    def on_toggle_dev_log(e: ft.Event[ft.Button]):
+        visible = bool(page.session.store.get(_DEV_LOG_VISIBLE_KEY))
+        page.session.store.set(_DEV_LOG_VISIBLE_KEY, not visible)
+        rebuild_settings()
+
+    async def on_copy_dev_log(e: ft.Event[ft.IconButton]):
+        await page.clipboard.set(tail_log())
+        show_toast(page, "Copied.")
+
     def on_open_on_launch_change(e: ft.Event[ft.Switch]):
         """Toggle both the setting and the actual OS startup registration.
 
@@ -115,6 +139,20 @@ def SettingsView(page: ft.Page) -> ft.View:
         set_run_in_background(page, e.control.value)
         page.window.prevent_close = e.control.value
         page.update()
+
+    scroll_offsets = page.session.store.get(_SETTINGS_SCROLL_KEY) or {}
+
+    def on_tab_scroll(name: str):
+        """Remember a tab's scroll offset so a rebuild (e.g. toggling the
+        dev log) can restore it instead of snapping back to the top.
+        """
+
+        def handler(e: ft.OnScrollEvent):
+            offsets = page.session.store.get(_SETTINGS_SCROLL_KEY) or {}
+            offsets[name] = e.pixels
+            page.session.store.set(_SETTINGS_SCROLL_KEY, offsets)
+
+        return handler
 
     def rebuild_settings():
         """Rebuild this view in place, if it's still the one on screen."""
@@ -238,9 +276,7 @@ def SettingsView(page: ft.Page) -> ft.View:
             color=ft.Colors.with_opacity(0.4, ft.Colors.ON_SURFACE_VARIANT), italic=True
         ),
         multiline=True,
-        min_lines=2,
-        max_lines=6,
-        expand=True,
+        height=FORM_FIELD_HEIGHT,
     )
 
     installed_themes = get_installed_themes(page)
@@ -332,6 +368,78 @@ def SettingsView(page: ft.Page) -> ft.View:
         if sys.platform == "win32"
         else []
     )
+
+    dev_mode_controls: list[ft.Control] = []
+    if is_dev_environment():
+        log_visible = bool(page.session.store.get(_DEV_LOG_VISIBLE_KEY))
+        widgets_dir = dev_widgets_dir()
+        dev_mode_controls = [
+            ft.Text("Developer tools", weight=ft.FontWeight.W_500),
+            ft.Text(
+                "Running from a source checkout, so widgets are also "
+                f"loaded straight from {widgets_dir or 'this repo'}, and "
+                "the Catalogue reads this repo's own registry.json - no "
+                "install step, no push, needed to see a change. See "
+                "CLAUDE.md's Developer mode section.",
+                size=12,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            ),
+            ft.Row(
+                [
+                    ft.OutlinedButton(
+                        "Reload widgets",
+                        on_click=on_reload_widgets,
+                        style=thin_button_style(),
+                    ),
+                    ft.OutlinedButton(
+                        "Hide log" if log_visible else "Show log",
+                        on_click=on_toggle_dev_log,
+                        style=thin_button_style(),
+                    ),
+                ],
+                spacing=8,
+            ),
+            *(
+                [
+                    ft.Row(
+                        [
+                            ft.Text(
+                                "Log (last 300 lines)",
+                                size=12,
+                                weight=ft.FontWeight.W_500,
+                                expand=True,
+                            ),
+                            ft.IconButton(
+                                icon=ft.Icons.COPY,
+                                icon_size=16,
+                                tooltip="Copy log",
+                                on_click=on_copy_dev_log,
+                            ),
+                        ],
+                    ),
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                ft.Text(
+                                    tail_log(),
+                                    size=11,
+                                    font_family="monospace",
+                                    selectable=True,
+                                ),
+                            ],
+                            scroll=ft.ScrollMode.AUTO,
+                        ),
+                        height=220,
+                        padding=8,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+                        border=card_border(),
+                        border_radius=radius_card(page),
+                    ),
+                ]
+                if log_visible
+                else []
+            ),
+        ]
 
     general_tab = ft.ListView(
         controls=[
@@ -430,16 +538,16 @@ def SettingsView(page: ft.Page) -> ft.View:
             ),
             theme_field,
             ft.FilledButton("Install", on_click=on_install_theme, style=thin_button_style()),
+            ft.Container(height=8),
+            ft.Divider(height=1, thickness=1, color=ft.Colors.OUTLINE_VARIANT),
+            ft.Container(height=8),
+            ft.Text(
+                "Danger Zone",
+                weight=ft.FontWeight.W_500,
+                color=ft.Colors.ERROR,
+            ),
             *(
                 [
-                    ft.Container(height=8),
-                    ft.Divider(height=1, thickness=1, color=ft.Colors.OUTLINE_VARIANT),
-                    ft.Container(height=8),
-                    ft.Text(
-                        "Danger Zone",
-                        weight=ft.FontWeight.W_500,
-                        color=ft.Colors.ERROR,
-                    ),
                     ft.Row(
                         [
                             ft.Column(
@@ -472,10 +580,13 @@ def SettingsView(page: ft.Page) -> ft.View:
                 if sys.platform == "win32"
                 else []
             ),
+            *dev_mode_controls,
         ],
         spacing=12,
         expand=True,
         padding=scroll_padding(),
+        on_scroll=on_tab_scroll("general"),
+        build_controls_on_demand=False,
     )
 
     accounts_tab = ft.ListView(
@@ -545,11 +656,15 @@ def SettingsView(page: ft.Page) -> ft.View:
                 value=get_place_id(page),
                 hint_text="https://www.roblox.com/games/1818/... or 1818",
                 on_blur=on_place_id_blur,
+                multiline=True,
+                height=FORM_FIELD_HEIGHT,
             ),
         ],
         spacing=12,
         expand=True,
         padding=scroll_padding(),
+        on_scroll=on_tab_scroll("accounts"),
+        build_controls_on_demand=False,
     )
 
     WIDGETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -558,7 +673,7 @@ def SettingsView(page: ft.Page) -> ft.View:
     if page.session.store.contains_key(_SETTINGS_FOCUS_WIDGET_KEY):
         page.session.store.remove(_SETTINGS_FOCUS_WIDGET_KEY)
 
-    installed_widgets, _load_errors = discover_widgets()
+    installed_widgets, _load_errors = discover_widgets(dev_widgets_dir())
 
     def on_widget_start_on_launch_change(widget_id: str):
         def handler(e: ft.Event[ft.Switch]):
@@ -639,7 +754,18 @@ def SettingsView(page: ft.Page) -> ft.View:
         spacing=16,
         expand=True,
         padding=scroll_padding(),
+        on_scroll=on_tab_scroll("widgets"),
+        build_controls_on_demand=False,
     )
+
+    for _name, _tab in (
+        ("general", general_tab),
+        ("accounts", accounts_tab),
+        ("widgets", widgets_tab),
+    ):
+        _offset = scroll_offsets.get(_name)
+        if _offset:
+            page.run_task(_tab.scroll_to, offset=_offset, duration=0)
 
     content = ft.Column(
         [
