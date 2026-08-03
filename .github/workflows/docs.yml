@@ -1,0 +1,36 @@
+name: Build and publish docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Generate API stubs
+        run: sphinx-apidoc --implicit-namespaces -f -e -o docs/source/api multitool
+
+      - name: Build HTML
+        run: sphinx-build -b html docs/source docs/build
+
+      - name: Publish to docs branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/build
+          publish_branch: docs
+          force_orphan: true
