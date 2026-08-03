@@ -41,8 +41,27 @@ CATALOGUE_SIZE = 104
 they read like a smaller, denser shop shelf next to the installed grid."""
 
 CARD_PADDING = 14
-ICON_CHIP_SIZE = 40
+ICON_CHIP_SIZE = 56
 BADGE_SIZE = 18
+HOVER_ZONE_SIZE = ICON_CHIP_SIZE + 12
+"""Size of the invisible hit box, pinned to a card's top-left corner,
+that triggers its description showcase. A little bigger than the icon
+chip itself so it's forgiving to aim for, but still small enough that
+the rest of the card (including the switch/settings/delete row) keeps
+its normal click and tooltip behavior."""
+
+HOVER_HINT_SIZE = 20
+"""Size of the small badge drawn in a card's top-left corner to hint
+that hovering there shows the widget's description."""
+DESCRIPTION_HOVER_DELAY = 1.0
+"""Seconds a description showcase waits, once shown, before it starts
+auto-scrolling - gives the reader a moment to start reading the top of
+the description before it moves, the same pattern long tooltips and
+now-playing marquees use."""
+
+DESCRIPTION_SCROLL_DURATION = 4000
+"""Duration, in milliseconds, of the auto-scroll animation that carries
+a description showcase from top to bottom."""
 
 
 def _icon_chip(icon: object, logo: str | None, *, active: bool, size: int) -> ft.Control:
@@ -179,43 +198,72 @@ def WidgetsView(page: ft.Page) -> ft.View:
         delete button uninstalls it after a confirmation prompt, removing
         its folder from disk.
 
-        The description sits in its own scrollable area that expands to
-        fill the space up to the footer, instead of a fixed line count
-        with an ellipsis - a long description scrolls in place rather
-        than getting cut short.
+        hover_zone is one control pinned to the card's actual top-left
+        corner (HOVER_ZONE_SIZE, independent of wherever the centered
+        icon chip renders): a slightly bigger, otherwise invisible hit
+        box with a small hint badge (HOVER_HINT_SIZE) drawn inside it.
+        The hover handler lives on that outer box rather than the badge
+        itself - Flet Stacks hit-test top to bottom and stop at the
+        first hit, so a sibling badge sitting on top of a separate
+        hover control would swallow the pointer and the control
+        underneath would never see it. Hovering the zone swaps the
+        whole card for a description showcase: a full-card overlay, on
+        top of everything else including the footer's
+        switch/settings/delete row, that shows nothing but the widget's
+        description. If the description is long enough to need it, the
+        overlay waits
+        DESCRIPTION_HOVER_DELAY seconds and then auto-scrolls itself
+        top to bottom over DESCRIPTION_SCROLL_DURATION ms, the same
+        pattern other apps use for descriptions too long to fit in
+        place. The overlay stays out of the hit-test tree
+        (`ignore_interactions`) while hidden, so it never steals clicks
+        from the card or its footer buttons when the widget isn't
+        being hovered.
 
         A widget whose Catalogue entry has a different sha256 than the
-        one recorded at install time gets an update button in place of
-        its settings/uninstall row, swapped for a progress ring while
-        the update is running - see has_update() and on_update().
+        one recorded at install time gets an update badge in the card's
+        top-right corner, swapped for a progress ring while the update
+        is running - see has_update() and on_update(). It's a separate
+        Stack overlay rather than part of the settings/uninstall row so
+        it doesn't push those buttons outward when it appears.
         """
         enabled = widget.id not in disabled_ids
         registry_entry = registry_by_id.get(widget.id)
         updatable = registry_entry is not None and has_update(registry_entry)
         updating = is_installing(page, widget.id)
 
+        overlay_ref: ft.Ref[ft.Container] = ft.Ref()
+        description_ref: ft.Ref[ft.Column] = ft.Ref()
+        hover_state = {"token": 0}
+
+        async def auto_scroll_description(token: int):
+            await asyncio.sleep(DESCRIPTION_HOVER_DELAY)
+            if hover_state["token"] != token or description_ref.current is None:
+                return
+            await description_ref.current.scroll_to(
+                offset=-1, duration=DESCRIPTION_SCROLL_DURATION
+            )
+
+        def show_description(e: ft.Event[ft.Container]):
+            if not e.data or overlay_ref.current is None:
+                return
+            hover_state["token"] += 1
+            overlay_ref.current.opacity = 1
+            overlay_ref.current.ignore_interactions = False
+            overlay_ref.current.update()
+            page.run_task(auto_scroll_description, hover_state["token"])
+
+        def hide_description(e: ft.Event[ft.Container]):
+            if e.data or overlay_ref.current is None:
+                return
+            hover_state["token"] += 1
+            overlay_ref.current.opacity = 0
+            overlay_ref.current.ignore_interactions = True
+            overlay_ref.current.update()
+            if description_ref.current is not None:
+                page.run_task(description_ref.current.scroll_to, offset=0, duration=0)
+
         trailing_actions: list[ft.Control] = []
-        if updating:
-            trailing_actions.append(
-                ft.Container(
-                    content=ft.ProgressRing(width=14, height=14, stroke_width=2),
-                    padding=8,
-                )
-            )
-        elif updatable:
-            trailing_actions.append(
-                ft.IconButton(
-                    icon=ft.Icons.SYSTEM_UPDATE_ALT,
-                    icon_size=16,
-                    icon_color=ft.Colors.PRIMARY,
-                    tooltip=(
-                        f"Update {widget.name} to version {registry_entry.version}"
-                        if registry_entry.version
-                        else f"Update {widget.name}"
-                    ),
-                    on_click=lambda e, ent=registry_entry: page.run_task(on_update, ent),
-                )
-            )
         if widget.build_settings is not None:
             trailing_actions.append(
                 ft.IconButton(
@@ -251,19 +299,6 @@ def WidgetsView(page: ft.Page) -> ft.View:
                         max_lines=1,
                         overflow=ft.TextOverflow.ELLIPSIS,
                     ),
-                    ft.Column(
-                        [
-                            ft.Text(
-                                widget.description or "No description provided.",
-                                size=11,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                                text_align=ft.TextAlign.CENTER,
-                            )
-                        ],
-                        scroll=ft.ScrollMode.AUTO,
-                        expand=True,
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
                     ft.Container(height=42),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -275,6 +310,57 @@ def WidgetsView(page: ft.Page) -> ft.View:
             border_radius=radius_card(page),
             tooltip=f"Open {widget.name}",
             on_click=lambda e, wid=widget.id: page.run_task(go_to_widget, wid),
+        )
+
+        hover_zone = ft.Container(
+            content=ft.Container(
+                content=ft.Icon(
+                    ft.Icons.INFO_OUTLINE_ROUNDED,
+                    size=round(HOVER_HINT_SIZE * 0.6),
+                    color=ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                width=HOVER_HINT_SIZE,
+                height=HOVER_HINT_SIZE,
+                alignment=ft.Alignment.CENTER,
+            ),
+            width=HOVER_ZONE_SIZE,
+            height=HOVER_ZONE_SIZE,
+            padding=4,
+            alignment=ft.Alignment.TOP_LEFT,
+            bgcolor=ft.Colors.TRANSPARENT,
+            tooltip="Show description",
+            top=0,
+            left=0,
+            on_hover=show_description,
+        )
+
+        description_overlay = ft.Container(
+            ref=overlay_ref,
+            content=ft.Column(
+                [
+                    ft.Text(
+                        widget.description or "No description provided.",
+                        size=12,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                ],
+                ref=description_ref,
+                scroll=ft.ScrollMode.HIDDEN,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+                expand=True,
+            ),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+            border=card_border(),
+            border_radius=radius_card(page),
+            padding=CARD_PADDING,
+            alignment=ft.Alignment.CENTER,
+            opacity=0,
+            animate_opacity=150,
+            ignore_interactions=True,
+            on_hover=hide_description,
+            expand=True,
         )
 
         footer_overlay = ft.Container(
@@ -303,7 +389,35 @@ def WidgetsView(page: ft.Page) -> ft.View:
             bottom=CARD_PADDING,
         )
 
-        return ft.Stack([card_body, footer_overlay], expand=True)
+        stack_children = [card_body, hover_zone, footer_overlay, description_overlay]
+        if updating:
+            stack_children.append(
+                ft.Container(
+                    content=ft.ProgressRing(width=14, height=14, stroke_width=2),
+                    top=6,
+                    right=6,
+                )
+            )
+        elif updatable:
+            stack_children.append(
+                ft.Container(
+                    content=ft.IconButton(
+                        icon=ft.Icons.SYSTEM_UPDATE_ALT,
+                        icon_size=16,
+                        icon_color=ft.Colors.PRIMARY,
+                        tooltip=(
+                            f"Update {widget.name} to version {registry_entry.version}"
+                            if registry_entry.version
+                            else f"Update {widget.name}"
+                        ),
+                        on_click=lambda e, ent=registry_entry: page.run_task(on_update, ent),
+                    ),
+                    top=0,
+                    right=0,
+                )
+            )
+
+        return ft.Stack(stack_children, expand=True)
 
     def build_catalogue_square(entry: CatalogEntry) -> ft.Control:
         """Build one Catalogue entry's tile.
