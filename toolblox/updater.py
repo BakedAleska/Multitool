@@ -1,23 +1,28 @@
-"""Check GitHub Releases for a newer build and hand off to the installer.
+"""Check GitHub Releases for a newer build and update this install in place.
 
-Windows only: the app ships through installer/Toolblox.iss's Inno Setup
-installer, which downloads a build from a GitHub release and extracts it
-over the existing installation. Updating is the same installer flow again,
-just triggered from inside the running app instead of by hand: download the
-latest release's installer exe, launch it, and close so it can replace
-files that are currently in use.
+Windows only. A first install still goes through installer/Toolblox.iss's
+Inno Setup wizard, but updating a running app no longer does: that used
+to relaunch the same installer, which re-downloaded the build a second
+time and ran its full wizard UI just to replace some files. Instead,
+this downloads the new build's zip directly and hands it to
+ToolbloxUpdater.exe (toolblox/updater_helper.py, bundled alongside
+Toolblox.exe - see release/build.py) - a separate small exe, since a
+running process can't overwrite its own loaded image and DLLs, which is
+also why apply_update() below doesn't wait for that helper to finish;
+it can't start doing its job until *this* process has already exited.
 
-.github/workflows/release.yml publishes a `<installer>.sha256` text file
-alongside every installer exe. download_installer() fetches that companion
-file and checks the downloaded exe's digest against it before returning,
-so a tampered or corrupted asset never reaches run_installer(). This
+.github/workflows/release.yml publishes a `<zip>.sha256` text file
+alongside every build zip. download_update() fetches that companion file
+and checks the downloaded zip's digest against it before returning, so a
+tampered or corrupted asset never reaches ToolbloxUpdater.exe. This
 doesn't replace code signing (the release itself could still be
-compromised at the source), but it does mean the exe that runs is
-byte-for-byte what the release published, not something altered in
+compromised at the source), but it does mean the zip that gets applied
+is byte-for-byte what the release published, not something altered in
 transit or by a bad mirror.
 """
 
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -34,7 +39,8 @@ from toolblox.version import APP_VERSION
 logger = get_logger(__name__)
 
 GITHUB_RELEASES_API = "https://api.github.com/repos/BakedAleska/Toolblox/releases/latest"
-INSTALLER_ASSET_PATTERN = re.compile(r"^ToolbloxSetup-.*\.exe$")
+WINDOWS_ZIP_ASSET_PATTERN = re.compile(r"^Toolblox-.*-windows\.zip$")
+UPDATER_HELPER_NAME = "ToolbloxUpdater.exe"
 MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024
 
 
@@ -72,11 +78,11 @@ def is_newer(candidate: str, current: str) -> bool:
 
 
 def check_for_update() -> Optional[UpdateInfo]:
-    """Check GitHub's latest release for a newer Windows installer.
+    """Check GitHub's latest release for a newer Windows build.
 
     Blocking. Call via asyncio.to_thread. Returns None on Windows if
     already up to date, and unconditionally on any other platform since
-    there's no installer to hand off to there yet. Raises UpdateError
+    there's no in-place updater for it there yet. Raises UpdateError
     with a user-facing message if the release can't be read.
     """
     if sys.platform != "win32":
@@ -105,15 +111,15 @@ def check_for_update() -> Optional[UpdateInfo]:
     sha256_url = None
     for asset in data.get("assets") or []:
         name = asset.get("name") or ""
-        if INSTALLER_ASSET_PATTERN.match(name):
+        if WINDOWS_ZIP_ASSET_PATTERN.match(name):
             download_url = asset.get("browser_download_url")
-        elif name.endswith(".sha256") and INSTALLER_ASSET_PATTERN.match(name[: -len(".sha256")]):
+        elif name.endswith(".sha256") and WINDOWS_ZIP_ASSET_PATTERN.match(
+            name[: -len(".sha256")]
+        ):
             sha256_url = asset.get("browser_download_url")
 
     if not download_url:
-        raise UpdateError(
-            f"Version {tag} is out, but its release has no Windows installer attached."
-        )
+        raise UpdateError(f"Version {tag} is out, but its release has no Windows build attached.")
 
     return UpdateInfo(
         version=tag.lstrip("vV"),
@@ -142,26 +148,26 @@ def _fetch_expected_sha256(sha256_url: str) -> str:
     return digest
 
 
-def download_installer(update: UpdateInfo) -> Path:
-    """Download an update's installer exe to a temp file. Blocking.
+def download_update(update: UpdateInfo) -> Path:
+    """Download an update's build zip to a temp file. Blocking.
 
     Call via asyncio.to_thread. Raises UpdateError with a user-facing
     message on any failure, including a checksum mismatch against the
-    `<installer>.sha256` file released alongside the exe - see this
-    module's docstring. If the release has no checksum asset at all
-    (shouldn't happen for a release built by release.yml, but could for
-    a hand-crafted one), the download is rejected rather than silently
+    `<zip>.sha256` file released alongside it - see this module's
+    docstring. If the release has no checksum asset at all (shouldn't
+    happen for a release built by release.yml, but could for a
+    hand-crafted one), the download is rejected rather than silently
     trusted. The caller owns the returned path and should hand it to
-    run_installer() or clean it up itself.
+    apply_update() or clean it up itself.
     """
     if not update.sha256_url:
         raise UpdateError(
-            "This release has no published checksum for its installer. "
-            "Refusing to run it - was it published outside the normal release workflow?"
+            "This release has no published checksum for its build. "
+            "Refusing to apply it - was it published outside the normal release workflow?"
         )
     expected_sha256 = _fetch_expected_sha256(update.sha256_url)
 
-    fd, tmp_name = tempfile.mkstemp(prefix="ToolbloxSetup-", suffix=".exe")
+    fd, tmp_name = tempfile.mkstemp(prefix="Toolblox-update-", suffix=".zip")
     tmp_path = Path(tmp_name)
 
     try:
@@ -176,11 +182,11 @@ def download_installer(update: UpdateInfo) -> Path:
                     for chunk in response.iter_bytes():
                         total += len(chunk)
                         if total > MAX_DOWNLOAD_BYTES:
-                            raise UpdateError("The installer download exceeded the size limit.")
+                            raise UpdateError("The update download exceeded the size limit.")
                         f.write(chunk)
                         hasher.update(chunk)
             except httpx.HTTPError as e:
-                logger.warning("Couldn't download update installer: %s", e)
+                logger.warning("Couldn't download update: %s", e)
                 raise UpdateError(
                     f"Couldn't download the update. Is your connection working? ({e})"
                 ) from e
@@ -188,7 +194,7 @@ def download_installer(update: UpdateInfo) -> Path:
         digest = hasher.hexdigest()
         if digest != expected_sha256:
             logger.warning(
-                "Update installer checksum mismatch (expected %s, got %s)",
+                "Update checksum mismatch (expected %s, got %s)",
                 expected_sha256,
                 digest,
             )
@@ -203,13 +209,34 @@ def download_installer(update: UpdateInfo) -> Path:
     return tmp_path
 
 
-def run_installer(installer_path: Path) -> None:
-    """Launch a downloaded installer as a detached process.
+def apply_update(zip_path: Path) -> None:
+    """Hand the downloaded update zip to ToolbloxUpdater.exe and let it run.
 
-    Doesn't wait for it or exit the app itself - the installer's own
-    CloseApplications setting closes this app when it needs to replace
-    files that are in use. Call this, then let the caller close the
-    window on its own terms (see UI code) so the shutdown looks
-    intentional rather than like a crash.
+    Spawned detached, as its own process - it has to be, since it's
+    about to wait for *this* process to exit and then overwrite the
+    files this process is currently running from, neither of which a
+    process can do to itself. See toolblox/updater_helper.py's
+    docstring for what happens next. Raises UpdateError if the helper
+    isn't where it's expected to be, which would mean a build that
+    forgot to bundle it rather than anything the user did.
     """
-    subprocess.Popen([str(installer_path)], close_fds=True)
+    install_dir = Path(sys.executable).resolve().parent
+    helper_path = install_dir / UPDATER_HELPER_NAME
+    if not helper_path.is_file():
+        raise UpdateError(
+            f"This install is missing {UPDATER_HELPER_NAME}. "
+            "Reinstall from the Releases page to fix it."
+        )
+
+    subprocess.Popen(
+        [
+            str(helper_path),
+            "--pid",
+            str(os.getpid()),
+            "--install-dir",
+            str(install_dir),
+            "--zip",
+            str(zip_path),
+        ],
+        close_fds=True,
+    )

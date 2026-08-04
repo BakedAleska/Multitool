@@ -2,9 +2,11 @@
 
 Wraps `flet pack` (a PyInstaller-based bundler) with this project's own
 packaging needs: the assets/ folder, the app icon, and, on Windows, the
-native multi-instance helper. Produces a single zip in dist/, named to
-match what installer/Toolblox.iss downloads and toolblox/updater.py
-checks for, and prints its sha256 so both can be updated for a release.
+native multi-instance helper and ToolbloxUpdater.exe (built separately
+with plain PyInstaller - see _build_updater_helper). Produces a single
+zip in dist/, named to match what installer/Toolblox.iss downloads and
+toolblox/updater.py checks for, and prints its sha256 so both can be
+updated for a release.
 
 Every packaged build is the "beta" release channel - see
 toolblox.devtools.release_channel. There's no separate packaged build for
@@ -69,13 +71,54 @@ def _run_flet_pack(args: list[str]) -> None:
     )
 
 
+def _build_updater_helper() -> Path:
+    """Build ToolbloxUpdater.exe with plain PyInstaller and return its path.
+
+    Not `flet pack` - that wrapper always treats its target as a Flet
+    app and pulls in Flet's own runtime, but toolblox/updater_helper.py
+    has no Flet or webview dependency at all, so it goes through
+    PyInstaller directly instead. --onefile since this is one small exe
+    to --add-binary into the main build below, not something that needs
+    its own folder of files.
+    """
+    helper_dist = DIST_DIR / "updater_helper"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "updater_helper.py",
+            "--name",
+            "ToolbloxUpdater",
+            "--onefile",
+            "--noconsole",
+            "--distpath",
+            str(helper_dist),
+            "--workpath",
+            str(BUILD_DIR / "updater_helper"),
+            "--specpath",
+            str(BUILD_DIR / "updater_helper"),
+            "-y",
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+    return helper_dist / "ToolbloxUpdater.exe"
+
+
 def _build_windows() -> Path:
     """Pack the Windows build and return its onedir output folder.
 
     --onedir keeps the app as a folder of files rather than a single
     exe, matching how installer/Toolblox.iss extracts its downloaded
     zip straight into {app} - a single-file exe would have nowhere to
-    put the native helper or the assets/ folder alongside it.
+    put the native helper, the updater helper, or the assets/ folder
+    alongside it.
+
+    ToolbloxUpdater.exe (see _build_updater_helper) is added at the
+    bundle's own root (--add-binary's "." destination), matching where
+    toolblox/updater.py::apply_update() looks for it - right next to
+    Toolblox.exe itself.
 
     --collect-all pythonnet/clr_loader: pywebview's Windows backend
     loads the .NET runtime through pythonnet and clr_loader.
@@ -104,6 +147,8 @@ def _build_windows() -> Path:
             f"Missing {helper}. Build it first: see native/multi_instance_helper/README.md."
         )
 
+    updater_helper = _build_updater_helper()
+
     _run_flet_pack(
         [
             "--name",
@@ -125,6 +170,8 @@ def _build_windows() -> Path:
             "assets:assets",
             "--add-binary",
             f"{helper}:native",
+            "--add-binary",
+            f"{updater_helper}:.",
             "--distpath",
             str(DIST_DIR),
             "--pyinstaller-build-args=--collect-all=pythonnet",
@@ -188,8 +235,10 @@ def main() -> None:
     """Build this platform's package, zip it, and print its sha256.
 
     Dispatches on the host OS rather than cross-compiling. Removes
-    PyInstaller's own build/ scratch directory afterward so it doesn't
-    linger between runs; dist/ (the zip itself) is left in place.
+    PyInstaller's own build/ scratch directory, and the intermediate
+    dist/updater_helper/ produced by _build_updater_helper, afterward so
+    neither lingers between runs; dist/ (the zip itself) is left in
+    place.
     """
     DIST_DIR.mkdir(exist_ok=True)
     system = platform.system()
@@ -207,6 +256,9 @@ def main() -> None:
 
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
+    updater_helper_dist = DIST_DIR / "updater_helper"
+    if updater_helper_dist.exists():
+        shutil.rmtree(updater_helper_dist)
 
     with zip_path.open("rb") as f:
         digest = hashlib.file_digest(f, "sha256").hexdigest()

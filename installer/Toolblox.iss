@@ -54,10 +54,11 @@ ArchiveExtraction=full
 DisableWelcomePage=no
 AppReadmeFile=https://github.com/BakedAleska/Toolblox
 VersionInfoDescription=Toolblox installer (beta)
-; Lets this same installer double as the updater toolblox/updater.py
-; launches from inside a running app: if Toolblox.exe is still open when
-; its own update relaunches this installer, close it automatically instead
-; of blocking on a "file in use" prompt, then start it back up afterward.
+; In-app updates no longer go through this installer at all - see
+; toolblox/updater_helper.py for that. This only matters for a first
+; install (or a manual reinstall) run while Toolblox happens to already
+; be open: close it automatically instead of blocking on a "file in
+; use" prompt, then start it back up afterward.
 CloseApplications=yes
 RestartApplications=yes
 

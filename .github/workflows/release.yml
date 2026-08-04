@@ -58,10 +58,20 @@ jobs:
       - name: Build package
         run: python release/build.py
 
+      - name: Checksum build zip
+        shell: bash
+        run: |
+          set -eu
+          for zip in dist/Toolblox-*-windows.zip; do
+            sha256sum "$zip" | cut -d' ' -f1 > "${zip}.sha256"
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: dist-windows
-          path: dist/Toolblox-*-windows.zip
+          path: |
+            dist/Toolblox-*-windows.zip
+            dist/Toolblox-*-windows.zip.sha256
           if-no-files-found: error
 
   build-macos:
@@ -155,6 +165,13 @@ jobs:
           draft: true
           files: dist/*
           body: |
+            Windows: download and run ToolbloxSetup-*.exe. Don't
+            download the Toolblox-*-windows.zip directly - it's a
+            build artifact the installer and the in-app updater use
+            internally, not meant to be extracted and run by hand.
+
+            macOS: download Toolblox-*-macos.zip and unzip it.
+
             Unsigned build. Windows will show a SmartScreen warning
             ("More info" -> "Run anyway"); macOS needs a right-click ->
             Open the first time, since Gatekeeper blocks an unsigned

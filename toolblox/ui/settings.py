@@ -56,7 +56,7 @@ from toolblox.ui.style import (
     thin_button_style,
 )
 from toolblox.ui.toast import show_toast
-from toolblox.updater import UpdateError, check_for_update, download_installer, run_installer
+from toolblox.updater import UpdateError, apply_update, check_for_update, download_update
 from toolblox.version import APP_VERSION
 from toolblox.widgets.loader import discover_widgets
 from toolblox.widgets.process import stop_all_processes
@@ -187,18 +187,17 @@ def SettingsView(page: ft.Page) -> ft.View:
         rebuild_settings()
 
     async def on_install_update(e: ft.Event[ft.Button]):
-        """Download the update installer, launch it, then fully exit the app.
+        """Download the update, hand it to ToolbloxUpdater.exe, then fully exit.
 
-        The installer's CloseApplications setting would close this app for
-        us anyway if we didn't, but closing it ourselves here means the
-        window goes away on its own terms instead of being killed out
-        from under the user. This must be a real exit, not just
-        page.window.close(): with "Run in background" on,
-        page.window.prevent_close makes close() hide to the tray instead
-        of quitting (see toolblox/app.py's on_window_event), which would
-        leave this process running and its files locked right as the
-        installer tries to overwrite them. See tray.py's _quit() for the
-        same prevent_close-bypassing pattern used from the tray menu.
+        ToolbloxUpdater.exe (toolblox/updater_helper.py) waits for this
+        process to actually exit before it touches any files, so this
+        must be a real exit, not just page.window.close(): with "Run in
+        background" on, page.window.prevent_close makes close() hide to
+        the tray instead of quitting (see toolblox/app.py's
+        on_window_event), which would leave this process running and its
+        files locked right when the updater goes to replace them. See
+        tray.py's _quit() for the same prevent_close-bypassing pattern
+        used from the tray menu.
         """
         info = page.session.store.get(_UPDATE_INFO_KEY)
         if info is None:
@@ -206,13 +205,19 @@ def SettingsView(page: ft.Page) -> ft.View:
         page.session.store.set(_UPDATE_DOWNLOADING_KEY, True)
         rebuild_settings()
         try:
-            installer_path = await asyncio.to_thread(download_installer, info)
+            zip_path = await asyncio.to_thread(download_update, info)
         except UpdateError as err:
             page.session.store.set(_UPDATE_DOWNLOADING_KEY, False)
             page.session.store.set(_UPDATE_ERROR_KEY, str(err))
             rebuild_settings()
             return
-        run_installer(installer_path)
+        try:
+            apply_update(zip_path)
+        except UpdateError as err:
+            page.session.store.set(_UPDATE_DOWNLOADING_KEY, False)
+            page.session.store.set(_UPDATE_ERROR_KEY, str(err))
+            rebuild_settings()
+            return
         tray.hide()
         stop_all_processes(page)
         page.window.prevent_close = False
