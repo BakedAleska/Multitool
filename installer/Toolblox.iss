@@ -1,17 +1,33 @@
-; Toolblox installer (beta).
+; Toolblox installer (alpha).
 ;
 ; This is a bootstrapper, not a full offline installer: it downloads the
 ; actual application build from a GitHub release at install time instead of
-; embedding it, so the installer itself stays small. Update AppVersion,
-; DownloadURL, and DownloadSHA256 for each new release.
+; embedding it, so the installer itself stays small.
+;
+; MyAppVersion, DownloadURL, and DownloadSHA256 have no checked-in default -
+; a stale or placeholder value here would compile fine and then fail (or
+; silently point at the wrong release) only later, at install time, which
+; is a much worse place to discover it. Compiling always requires passing
+; all three via ISCC's own /D flag:
+;   ISCC /DMyAppVersion=1.0.0 /DDownloadURL=https://... /DDownloadSHA256=... Toolblox.iss
+; .github/workflows/release.yml does this automatically for a real release,
+; computing DownloadSHA256 from the zip `python release/build.py` just
+; produced. For a manual local compile, run that script first and pass its
+; printed sha256 the same way.
 
 #define MyAppName "Toolblox"
-#define MyAppVersion "0.1.0-beta"
+#ifndef MyAppVersion
+  #error "MyAppVersion is not defined. Compile with /DMyAppVersion=<version>."
+#endif
 #define MyAppPublisher "BakedAleska"
 #define MyAppExeName "Toolblox.exe"
-#define DownloadURL "https://github.com/BakedAleska/Toolblox/releases/download/v0.1.0-beta/Toolblox-0.1.0-beta-windows.zip"
+#ifndef DownloadURL
+  #error "DownloadURL is not defined. Compile with /DDownloadURL=<url>."
+#endif
 #define DownloadFileName "Toolblox-windows.zip"
-#define DownloadSHA256 "ec4d8a534837505a3d9e5394901d40cd8576ff660cc25fdd47866a90853092e3"
+#ifndef DownloadSHA256
+  #error "DownloadSHA256 is not defined. Compile with /DDownloadSHA256=<sha256>."
+#endif
 
 [Setup]
 AppId={{7E3F6C2D-6B7A-4A2E-9C3D-2C8F5B1E4A10}
@@ -37,7 +53,7 @@ WizardStyle=modern
 ArchiveExtraction=full
 DisableWelcomePage=no
 AppReadmeFile=https://github.com/BakedAleska/Toolblox
-VersionInfoDescription=Toolblox installer (beta)
+VersionInfoDescription=Toolblox installer (alpha)
 ; Lets this same installer double as the updater toolblox/updater.py
 ; launches from inside a running app: if Toolblox.exe is still open when
 ; its own update relaunches this installer, close it automatically instead

@@ -1,0 +1,197 @@
+"""Build a distributable Toolblox package with `flet pack`.
+
+Wraps `flet pack` (a PyInstaller-based bundler) with this project's own
+packaging needs: the assets/ folder, the app icon, and, on Windows, the
+native multi-instance helper. Produces a single zip in dist/, named to
+match what installer/Toolblox.iss downloads and toolblox/updater.py
+checks for, and prints its sha256 so both can be updated for a release.
+
+Every packaged build is the "alpha" release channel - see
+toolblox.devtools.release_channel. There's no separate packaged build for
+"canary"; that's what running from source already is.
+
+Usage: ``python release/build.py``. Run this on the platform you're
+building for - it does not cross-compile. Requires `pyinstaller`
+(``pip install -r requirements-dev.txt``).
+"""
+
+import hashlib
+import platform
+import shutil
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from toolblox.devtools import REPO_ROOT  # noqa: E402
+from toolblox.startup import BUNDLE_ID  # noqa: E402
+from toolblox.version import APP_VERSION  # noqa: E402
+
+DIST_DIR = REPO_ROOT / "dist"
+BUILD_DIR = REPO_ROOT / "build"
+
+
+def _numeric_version() -> str:
+    """APP_VERSION with any "-suffix" (e.g. "-alpha") dropped."""
+    return APP_VERSION.split("-")[0]
+
+
+def _windows_file_version() -> str:
+    """APP_VERSION as the 4-part "n.n.n.n" string --file-version needs."""
+    parts = _numeric_version().split(".")
+    while len(parts) < 4:
+        parts.append("0")
+    return ".".join(parts[:4])
+
+
+def _flet_cli() -> str:
+    """The `flet` console script next to the running interpreter.
+
+    Not `python -m flet` - flet's CLI is a package, not a runnable
+    module, so it only works invoked as its own console script.
+    """
+    script = Path(sys.executable).parent / ("flet.exe" if sys.platform == "win32" else "flet")
+    return str(script) if script.exists() else "flet"
+
+
+def _run_flet_pack(args: list[str]) -> None:
+    """Run `flet pack` from REPO_ROOT, auto-confirming its prompts.
+
+    Raises CalledProcessError on any nonzero exit, which stops main()
+    immediately rather than continuing on to zip a partial/failed build.
+    """
+    subprocess.run(
+        [_flet_cli(), "pack", "main.py", *args, "-y"],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
+def _build_windows() -> Path:
+    """Pack the Windows build and return its onedir output folder.
+
+    --onedir keeps the app as a folder of files rather than a single
+    exe, matching how installer/Toolblox.iss extracts its downloaded
+    zip straight into {app} - a single-file exe would have nowhere to
+    put the native helper or the assets/ folder alongside it.
+    """
+    helper = (
+        REPO_ROOT / "native" / "multi_instance_helper" / "multi_instance_helper.exe"
+    )
+    if not helper.exists():
+        raise SystemExit(
+            f"Missing {helper}. Build it first: see native/multi_instance_helper/README.md."
+        )
+
+    _run_flet_pack(
+        [
+            "--name",
+            "Toolblox",
+            "--icon",
+            "installer/app_icon.ico",
+            "--product-name",
+            "Toolblox",
+            "--product-version",
+            _numeric_version(),
+            "--file-version",
+            _windows_file_version(),
+            "--company-name",
+            "BakedAleska",
+            "--copyright",
+            "BakedAleska",
+            "--onedir",
+            "--add-data",
+            "assets:assets",
+            "--add-binary",
+            f"{helper}:native",
+            "--distpath",
+            str(DIST_DIR),
+        ]
+    )
+    return DIST_DIR / "Toolblox"
+
+
+def _build_macos() -> Path:
+    """Pack the macOS build and return the resulting .app bundle.
+
+    Unsigned - Gatekeeper will require a right-click -> Open the first
+    time a user runs it. See CLAUDE.md's "Known risks / open decisions"
+    for the signing/notarization decision this is deferring.
+    """
+    _run_flet_pack(
+        [
+            "--name",
+            "Toolblox",
+            "--icon",
+            "installer/app_icon.icns",
+            "--bundle-id",
+            BUNDLE_ID,
+            "--product-name",
+            "Toolblox",
+            "--product-version",
+            _numeric_version(),
+            "--add-data",
+            "assets:assets",
+        ]
+    )
+    return DIST_DIR / "Toolblox.app"
+
+
+def _zip_bundle(bundle: Path, dest: Path, *, flatten: bool) -> None:
+    """Zip `bundle` to `dest`.
+
+    flatten=True writes paths relative to the bundle itself, so its
+    *contents* land at the zip root (what installer/Toolblox.iss
+    expects to extract straight into {app}). flatten=False keeps the
+    bundle's own folder name as the zip's top-level entry (what a
+    macOS .app needs, so unzipping it hands back a real .app to drag
+    into Applications instead of loose Contents/ files).
+
+    as_posix() on the arcname matters on Windows: zipfile stores
+    whatever separator relative_to() gives it verbatim, which on
+    Windows is a backslash, and the ZIP spec requires "/" - a
+    backslash-named entry extracts as a flat, oddly-named file instead
+    of a real subdirectory.
+    """
+    dest.unlink(missing_ok=True)
+    root = bundle if flatten else bundle.parent
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in bundle.rglob("*"):
+            if path.is_file():
+                zf.write(path, path.relative_to(root).as_posix())
+
+
+def main() -> None:
+    """Build this platform's package, zip it, and print its sha256.
+
+    Dispatches on the host OS rather than cross-compiling. Removes
+    PyInstaller's own build/ scratch directory afterward so it doesn't
+    linger between runs; dist/ (the zip itself) is left in place.
+    """
+    DIST_DIR.mkdir(exist_ok=True)
+    system = platform.system()
+
+    if system == "Windows":
+        bundle = _build_windows()
+        zip_path = DIST_DIR / f"Toolblox-{APP_VERSION}-windows.zip"
+        _zip_bundle(bundle, zip_path, flatten=True)
+    elif system == "Darwin":
+        bundle = _build_macos()
+        zip_path = DIST_DIR / f"Toolblox-{APP_VERSION}-macos.zip"
+        _zip_bundle(bundle, zip_path, flatten=False)
+    else:
+        raise SystemExit(f"Unsupported platform for packaging: {system}")
+
+    if BUILD_DIR.exists():
+        shutil.rmtree(BUILD_DIR)
+
+    with zip_path.open("rb") as f:
+        digest = hashlib.file_digest(f, "sha256").hexdigest()
+    print(f"Built {zip_path}")
+    print(f"sha256: {digest}")
+
+
+if __name__ == "__main__":
+    main()

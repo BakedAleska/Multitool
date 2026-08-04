@@ -1,0 +1,144 @@
+name: Build and publish a release
+
+# Triggered by pushing a version tag (e.g. `v0.1.0-alpha`), which must match
+# toolblox.version.APP_VERSION with a leading "v" - see that module's
+# docstring. Every build here is the packaged "alpha" release channel (see
+# toolblox.devtools.release_channel); there's no separate packaged build
+# for "canary".
+#
+# workflow_dispatch exists for rebuilding/testing the build steps by hand;
+# the installer and release jobs are guarded to only run for a real tag
+# push, since they construct a GitHub release download URL from the ref
+# and publish to GitHub Releases, neither of which makes sense off a
+# branch. A workflow_dispatch run off a tag ref (re-running a past
+# release) still works.
+#
+# All builds are unsigned for now: Windows SmartScreen and macOS Gatekeeper
+# will both warn on first run. See CLAUDE.md's "Known risks / open
+# decisions" for the signing/notarization decision this is deferring.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      app-version: ${{ steps.version.outputs.app-version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Read APP_VERSION
+        id: version
+        run: |
+          echo "app-version=$(python -c 'from toolblox.version import APP_VERSION; print(APP_VERSION)')" >> "$GITHUB_OUTPUT"
+
+  build-windows:
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Build package
+        run: python release/build.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: dist/Toolblox-*-windows.zip
+          if-no-files-found: error
+
+  build-macos:
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Build package
+        run: python release/build.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos
+          path: dist/Toolblox-*-macos.zip
+          if-no-files-found: error
+
+  installer:
+    needs: [version, build-windows]
+    if: github.ref_type == 'tag'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-windows
+          path: dist
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Compile installer
+        shell: bash
+        run: |
+          set -eu
+          VERSION="${{ needs.version.outputs.app-version }}"
+          ZIP_NAME="Toolblox-${VERSION}-windows.zip"
+          SHA256=$(sha256sum "dist/${ZIP_NAME}" | cut -d' ' -f1)
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP_NAME}"
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
+            "/DMyAppVersion=${VERSION}" \
+            "/DDownloadURL=${URL}" \
+            "/DDownloadSHA256=${SHA256}" \
+            installer/Toolblox.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-installer
+          path: installer/Output/ToolbloxSetup-*.exe
+          if-no-files-found: error
+
+  release:
+    needs: [build-macos, installer]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist/*
+          body: |
+            Unsigned build. Windows will show a SmartScreen warning
+            ("More info" -> "Run anyway"); macOS needs a right-click ->
+            Open the first time, since Gatekeeper blocks an unsigned
+            app from opening normally.

@@ -16,7 +16,10 @@ from toolblox.logs import get_logger
 logger = get_logger(__name__)
 
 _APP_NAME = "Toolblox"
-_LAUNCH_AGENT_LABEL = "com.bakedaleska.toolblox"
+BUNDLE_ID = "com.bakedaleska.toolblox"
+"""The app's reverse-DNS identifier. Used as the macOS LaunchAgent label
+here, and reused by release/build.py as the packaged app's --bundle-id -
+one shared constant instead of two copies that could drift apart."""
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 _PLIST_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -103,7 +106,7 @@ def _windows_set_enabled(enabled: bool) -> None:
 
 
 def _macos_plist_path() -> Path:
-    return Path.home() / "Library" / "LaunchAgents" / f"{_LAUNCH_AGENT_LABEL}.plist"
+    return Path.home() / "Library" / "LaunchAgents" / f"{BUNDLE_ID}.plist"
 
 
 def _macos_set_enabled(enabled: bool) -> None:
@@ -114,6 +117,6 @@ def _macos_set_enabled(enabled: bool) -> None:
     args = "\n".join(f"        <string>{arg}</string>" for arg in _launch_command())
     try:
         plist_path.parent.mkdir(parents=True, exist_ok=True)
-        plist_path.write_text(_PLIST_TEMPLATE.format(label=_LAUNCH_AGENT_LABEL, args=args))
+        plist_path.write_text(_PLIST_TEMPLATE.format(label=BUNDLE_ID, args=args))
     except OSError as e:
         logger.error("Couldn't write the LaunchAgent plist: %s", e)

@@ -2,3 +2,6 @@
 # Install with: pip install -r requirements-dev.txt
 sphinx>=9.1.0
 furo>=2025.12.19
+
+# Needed by `flet pack` (see release/build.py) to build a release.
+pyinstaller>=6.21.0

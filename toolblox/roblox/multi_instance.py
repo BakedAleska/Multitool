@@ -1,10 +1,10 @@
 """Windows-only bypass for Roblox's singleton-instance check.
 
-Runs the native helper at native/multi_instance_helper/multi_instance_helper.exe
-(see its README for how the bypass works) so a second account's Join can
-open its own Roblox window instead of just activating whichever one is
-already running. Only meaningful on Windows, since Roblox doesn't enforce
-the same single-instance restriction on macOS.
+Runs the native helper (see native/multi_instance_helper/README.md for how
+the bypass works) so a second account's Join can open its own Roblox
+window instead of just activating whichever one is already running. Only
+meaningful on Windows, since Roblox doesn't enforce the same single-instance
+restriction on macOS.
 """
 
 import subprocess
@@ -15,12 +15,28 @@ from toolblox.logs import get_logger
 
 logger = get_logger(__name__)
 
-HELPER_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "native"
-    / "multi_instance_helper"
-    / "multi_instance_helper.exe"
-)
+
+def _helper_path() -> Path:
+    """Where the helper binary lives, for a source checkout or a packaged build.
+
+    From source, it's the repo's own native/multi_instance_helper/ folder.
+    A packaged build has no such folder next to the executable - the
+    Windows build (see release/build.py) bundles the helper as PyInstaller
+    data under a "native" folder instead, which PyInstaller unpacks under
+    sys._MEIPASS at runtime, whether the build is onefile or onedir.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        return base / "native" / "multi_instance_helper.exe"
+    return (
+        Path(__file__).resolve().parent.parent.parent
+        / "native"
+        / "multi_instance_helper"
+        / "multi_instance_helper.exe"
+    )
+
+
+HELPER_PATH = _helper_path()
 
 
 def clear_singleton_instance() -> None:
