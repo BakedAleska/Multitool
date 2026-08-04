@@ -3,7 +3,7 @@
 Characters are stored as a JSON list at ``<DATA_DIR>/rogue_lineage.json``,
 a standalone store owned by this widget - not a namespace inside
 accounts.json, since a roster entry doesn't have to correspond to a
-tracked Multitool account. A character can instead be linked to one, via
+tracked Toolblox account. A character can instead be linked to one, via
 its ``account_id`` field, and kept in sync with it (see
 ``sync_with_accounts``).
 """
@@ -12,8 +12,8 @@ import json
 import time
 import uuid
 
-from multitool.config import DATA_DIR
-from multitool.logs import get_logger
+from toolblox.config import DATA_DIR
+from toolblox.logs import get_logger
 
 logger = get_logger(__name__)
 
@@ -82,7 +82,7 @@ def sync_with_accounts(
     automatically the moment a tracked account's username
     case-insensitively matches its own - this is what lets a character
     entered by hand start syncing the moment its account gets added to
-    Multitool, without the user having to re-link it.
+    Toolblox, without the user having to re-link it.
 
     Returns the (possibly mutated) list and whether anything changed, so
     the caller only needs to save and re-render when it did.

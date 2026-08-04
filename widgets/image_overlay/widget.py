@@ -3,7 +3,7 @@
 Its UI is Flet, like any widget. What actually shows the image is a
 separate always-on-top, borderless window (backend/overlay_image.py),
 started and stopped the same way widgets/autoclicker starts and stops
-its click loop backend, via multitool/widgets/process.py. That backend
+its click loop backend, via toolblox/widgets/process.py. That backend
 window has no picture-viewer chrome and no taskbar entry, so nothing
 about it looks like "a window" was opened at all.
 
@@ -12,7 +12,7 @@ decoder rather than adding Pillow as a dependency, and tkinter can't
 decode JPEG on its own.
 
 By default, pressing Start doesn't show the image right away. It arms a
-background poll (multitool/roblox/detect.py::is_roblox_running) that
+background poll (toolblox/roblox/detect.py::is_roblox_running) that
 starts the backend window only while Roblox is running, and stops it the
 moment Roblox closes, so the overlay never lingers on the desktop after
 the game it belongs to has closed. Settings can point that same poll at
@@ -29,11 +29,19 @@ from typing import Optional
 
 import flet as ft
 
-from multitool.roblox.detect import is_roblox_running
-from multitool.state import get_widget_setting, set_widget_setting
-from multitool.ui.layout import build_layout, widget_route
-from multitool.widgets.api import Widget
-from multitool.widgets.process import WidgetProcess, start_process, stop_process
+from toolblox.roblox.detect import is_roblox_running
+from toolblox.state import get_widget_setting, set_widget_setting
+from toolblox.ui.layout import build_layout, widget_route
+from toolblox.ui.style import (
+    SPACE_LG,
+    SPACE_MD,
+    SPACE_SM,
+    scroll_margin,
+    text_caption,
+    text_title,
+)
+from toolblox.widgets.api import Widget
+from toolblox.widgets.process import WidgetProcess, start_process, stop_process
 
 BACKEND_SCRIPT = Path(__file__).parent / "backend" / "overlay_image.py"
 AREA_PICKER_SCRIPT = Path(__file__).parent / "backend" / "area_picker.py"
@@ -52,7 +60,7 @@ POLL_INTERVAL_SECONDS = 3.0
 def _is_app_running(exe_path: str) -> bool:
     """Return True if a process matching `exe_path`'s file name is running.
 
-    Same OS process-list shelling as `multitool.roblox.detect.is_roblox_running`,
+    Same OS process-list shelling as `toolblox.roblox.detect.is_roblox_running`,
     generalized to an arbitrary executable so the overlay can watch for a
     user-chosen app instead of only Roblox. Blocking; callers on the Flet
     event loop should run it via `asyncio.to_thread`. Never raises; any
@@ -143,7 +151,7 @@ async def _pick_area() -> Optional[dict]:
 
     Spawns `backend/area_picker.py` as a one-shot subprocess and reads
     the single JSON line it prints, the same pattern
-    multitool/roblox/login.py uses for its own subprocess. Returns None
+    toolblox/roblox/login.py uses for its own subprocess. Returns None
     if the user cancelled, closed the picker some other way, or it
     printed nothing at all.
     """
@@ -194,7 +202,7 @@ def build_view(page: ft.Page) -> ft.View:
     """
     area = get_widget_setting(page, WIDGET_ID, "area", DEFAULT_AREA)
 
-    image_path_text = ft.Text("No image selected.", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+    image_path_text = text_caption("No image selected.")
     status_text = ft.Text("Stopped", weight=ft.FontWeight.W_600)
     pick_button = ft.OutlinedButton("Choose image (PNG or GIF)")
     x_field = ft.TextField(label="X", value=str(area["x"]), width=90)
@@ -202,11 +210,9 @@ def build_view(page: ft.Page) -> ft.View:
     width_field = ft.TextField(label="Width", value=str(area["width"]), width=90)
     height_field = ft.TextField(label="Height", value=str(area["height"]), width=90)
     pick_area_button = ft.OutlinedButton("Pick area on screen...")
-    pick_area_hint = ft.Text(
+    pick_area_hint = text_caption(
         "Opens a full-screen picker. Click and drag to draw the area, then "
-        "press Enter to save it or Esc to leave the area unchanged.",
-        size=12,
-        color=ft.Colors.ON_SURFACE_VARIANT,
+        "press Enter to save it or Esc to leave the area unchanged."
     )
     revert_area_button = ft.TextButton(
         "Revert",
@@ -457,25 +463,25 @@ def build_view(page: ft.Page) -> ft.View:
 
     content = ft.Column(
         [
-            ft.Text("Image Overlay", size=24, weight=ft.FontWeight.BOLD),
-            ft.Text(
+            text_title("Image Overlay"),
+            text_caption(
                 "Pins an image on top of everything else on screen, inside "
                 "the area below, with no window chrome or taskbar entry. By "
                 "default it shows only while Roblox is open, and hides once "
                 "it closes; change what it watches for, or turn that off "
-                "entirely, in Settings.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "entirely, in Settings."
             ),
-            ft.Row([pick_button, image_path_text]),
-            ft.Text("Area", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Row([x_field, y_field, width_field, height_field]),
-            ft.Row([pick_area_button, revert_area_button], wrap=True, spacing=8),
+            ft.Row([pick_button, image_path_text], spacing=SPACE_MD),
+            text_caption("Area"),
+            ft.Row([x_field, y_field, width_field, height_field], spacing=SPACE_MD),
+            ft.Row([pick_area_button, revert_area_button], wrap=True, spacing=SPACE_SM),
             pick_area_hint,
-            ft.Row([start_button, stop_button]),
+            ft.Row([start_button, stop_button], spacing=SPACE_MD),
             status_text,
         ],
-        spacing=12,
+        spacing=SPACE_LG,
+        scroll=ft.ScrollMode.AUTO,
+        margin=scroll_margin(),
     )
 
     return ft.View(
@@ -507,10 +513,10 @@ def build_settings(page: ft.Page) -> ft.Control:
     current_watch_text = ft.Text(watch_label(watch_app_path), size=13, weight=ft.FontWeight.W_600)
     watch_row = ft.Row(
         [
-            ft.Text("Watching for:", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+            text_caption("Watching for:"),
             current_watch_text,
         ],
-        spacing=6,
+        spacing=SPACE_SM,
         visible=watch_enabled,
     )
     browse_button = ft.OutlinedButton(
@@ -559,13 +565,11 @@ def build_settings(page: ft.Page) -> ft.Control:
 
     return ft.Column(
         [
-            ft.Text(
+            text_caption(
                 "By default, the overlay only shows while Roblox is open, "
                 "and hides once it closes. Turn this off to have it show "
                 "as soon as you press Start and stay up until you press "
-                "Stop, regardless of what's open.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "Stop, regardless of what's open."
             ),
             ft.Checkbox(
                 label="Only show while an app is open",
@@ -573,14 +577,12 @@ def build_settings(page: ft.Page) -> ft.Control:
                 on_change=on_watch_enabled_change,
             ),
             watch_row,
-            ft.Row([browse_button, reset_button], wrap=True, spacing=8),
+            ft.Row([browse_button, reset_button], wrap=True, spacing=SPACE_SM),
             ft.Divider(),
-            ft.Text(
+            text_caption(
                 "Whether clicks pass through the overlay to whatever's "
                 "underneath it, instead of landing on the overlay itself. "
-                "Windows only.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "Windows only."
             ),
             ft.Checkbox(
                 label="Click-through",
@@ -588,7 +590,7 @@ def build_settings(page: ft.Page) -> ft.Control:
                 on_change=on_click_through_change,
             ),
         ],
-        spacing=8,
+        spacing=SPACE_SM,
     )
 
 

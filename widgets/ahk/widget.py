@@ -14,7 +14,7 @@ mirrors both of them instead of only the first:
 - **Enable / Disable** - start or terminate the interpreter process for
   that macro, exactly like double-clicking the script or choosing Exit
   from its tray icon. This is still done via
-  `multitool/widgets/process.py::start_process`, the same "external
+  `toolblox/widgets/process.py::start_process`, the same "external
   process" pattern Autoclicker uses for its own backend.
 - **Suspend / Resume hotkeys** - toggle the script's hotkeys on and off
   *without* exiting it, exactly like choosing "Suspend Hotkeys" from its
@@ -32,7 +32,7 @@ mirrors both of them instead of only the first:
   script's own hotkey (see `_MACRO_TEMPLATE`) or its tray icon is used
   to suspend it instead.
 
-A macro marked "Start with Multitool" is auto-enabled by
+A macro marked "Start with Toolblox" is auto-enabled by
 `_start_on_app_launch`, wired up as `Widget.on_app_start`, the same
 mechanism Autoclicker uses for its own "Start on launch" toggle - this
 mirrors adding a keybind-remap script to Windows startup so it's always
@@ -56,12 +56,25 @@ from typing import Optional
 
 import flet as ft
 
-from multitool.config import DATA_DIR
-from multitool.state import get_widget_setting, set_widget_setting
-from multitool.ui.layout import build_layout, widget_route
-from multitool.ui.toast import show_confirm_toast, show_toast
-from multitool.widgets.api import Widget
-from multitool.widgets.process import WidgetProcess, start_process, stop_process
+from toolblox.config import DATA_DIR
+from toolblox.state import get_widget_setting, set_widget_setting
+from toolblox.ui.layout import build_layout, widget_route
+from toolblox.ui.style import (
+    SPACE_LG,
+    SPACE_MD,
+    SPACE_SM,
+    SPACE_XS,
+    SWITCH_SCALE,
+    card_border,
+    radius_card,
+    scroll_margin,
+    text_caption,
+    text_label,
+    text_title,
+)
+from toolblox.ui.toast import show_confirm_toast, show_toast
+from toolblox.widgets.api import Widget
+from toolblox.widgets.process import WidgetProcess, start_process, stop_process
 
 WIDGET_ID = "ahk"
 MACROS_DIR = DATA_DIR / "ahk_macros"
@@ -91,12 +104,12 @@ _AHK_CANDIDATES = [
 _NAME_SANITIZE_RE = re.compile(r'[<>:"/\\|?*]')
 
 _MACRO_TEMPLATE = (
-    "; New macro created in Multitool.\n"
-    "; Multitool can Enable/Disable this script (start/stop it entirely)\n"
+    "; New macro created in Toolblox.\n"
+    "; Toolblox can Enable/Disable this script (start/stop it entirely)\n"
     "; and Suspend/Resume it (turn its hotkeys on and off without exiting).\n"
     "; A script can also toggle its own suspend state from a hotkey, the\n"
     "; usual way to flip a keybind remap on and off without leaving\n"
-    "; Multitool - for example:\n"
+    "; Toolblox - for example:\n"
     "; F12::Suspend\n"
 )
 
@@ -261,7 +274,7 @@ async def _open_macros_folder(page: ft.Page) -> None:
 
 
 async def _start_on_app_launch(page: ft.Page) -> None:
-    """Auto-enable every macro marked "Start with Multitool".
+    """Auto-enable every macro marked "Start with Toolblox".
 
     Wired up as Widget.on_app_start, so it only runs if the user turned
     on this widget's "Start on launch" toggle under Settings -> Widgets,
@@ -307,7 +320,7 @@ def build_view(page: ft.Page) -> ft.View:
     import_button = ft.OutlinedButton("Import .ahk files", icon=ft.Icons.FILE_UPLOAD_OUTLINED)
     open_folder_button = ft.OutlinedButton("Open macros folder", icon=ft.Icons.FOLDER_OPEN)
     search_field = ft.TextField(label="Search macros", prefix_icon=ft.Icons.SEARCH, dense=True)
-    list_column = ft.Column(spacing=6)
+    list_column = ft.Column(spacing=SPACE_SM)
     file_picker = ft.FilePicker()
 
     def get_running() -> dict[str, WidgetProcess]:
@@ -380,34 +393,31 @@ def build_view(page: ft.Page) -> ft.View:
 
         name_row = ft.Row(
             [
-                ft.Text(path.stem, weight=ft.FontWeight.W_600, expand=True),
+                text_label(path.stem, expand=True),
                 ft.Container(
                     content=ft.Text("Suspended", size=10, color=ft.Colors.ON_ERROR_CONTAINER),
                     bgcolor=ft.Colors.ERROR_CONTAINER,
-                    padding=ft.Padding.symmetric(horizontal=6, vertical=2),
+                    padding=ft.Padding.symmetric(horizontal=SPACE_SM, vertical=SPACE_XS / 2),
                     border_radius=6,
                     visible=is_suspended,
                 ),
-            ]
+            ],
+            spacing=SPACE_SM,
         )
 
         actions_row = ft.Row(
             [
                 ft.Row(
                     [
-                        ft.Text(
-                            "Start with Multitool",
-                            size=11,
-                            color=ft.Colors.ON_SURFACE_VARIANT,
-                        ),
+                        text_caption("Start with Toolblox"),
                         ft.Switch(
                             value=is_autostart,
-                            scale=0.8,
+                            scale=SWITCH_SCALE,
                             disabled=not can_run,
                             on_change=on_autostart_change,
                         ),
                     ],
-                    spacing=4,
+                    spacing=SPACE_XS,
                 ),
                 ft.Row(
                     [
@@ -435,7 +445,8 @@ def build_view(page: ft.Page) -> ft.View:
                         ft.IconButton(
                             icon=ft.Icons.DELETE_OUTLINE, tooltip="Delete", on_click=on_delete
                         ),
-                    ]
+                    ],
+                    spacing=0,
                 ),
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -443,10 +454,10 @@ def build_view(page: ft.Page) -> ft.View:
         )
 
         return ft.Container(
-            content=ft.Column([name_row, actions_row], spacing=2),
-            padding=ft.Padding.symmetric(horizontal=12, vertical=6),
-            border_radius=8,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            content=ft.Column([name_row, actions_row], spacing=SPACE_XS),
+            padding=ft.Padding.symmetric(horizontal=SPACE_MD, vertical=SPACE_SM),
+            border=card_border(),
+            border_radius=radius_card(page),
         )
 
     def render_list(mounted: bool = True):
@@ -455,12 +466,10 @@ def build_view(page: ft.Page) -> ft.View:
         macros = [p for p in _list_macros() if matches(p)]
         if not macros:
             list_column.controls = [
-                ft.Text(
+                text_caption(
                     "No macros stored yet."
                     if not (search_field.value or "").strip()
-                    else "No macros match your search.",
-                    size=12,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
+                    else "No macros match your search."
                 )
             ]
         else:
@@ -558,36 +567,33 @@ def build_view(page: ft.Page) -> ft.View:
     banners: list[ft.Control] = []
     if not can_run:
         banners.append(
-            ft.Text(
+            text_caption(
                 "Enabling, disabling, and suspending a macro requires AutoHotkey, "
                 "which only exists on Windows. You can still store, browse, and "
-                "edit macros here.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "edit macros here."
             )
         )
 
     content = ft.Column(
         [
-            ft.Text("Autohotkey", size=24, weight=ft.FontWeight.BOLD),
-            ft.Text(
+            text_title("Autohotkey"),
+            text_caption(
                 "Enable a macro to start it, the same as opening it in "
                 "AutoHotkey - it keeps running in the background afterward. "
                 "Suspend turns its hotkeys off without exiting it. Edit always "
                 "opens an external editor - Notepad by default, VS Code if "
-                "it's installed - rather than editing here.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "it's installed - rather than editing here."
             ),
             *banners,
-            ft.Row([new_name_field, create_button]),
-            ft.Row([import_button, open_folder_button]),
+            ft.Row([new_name_field, create_button], spacing=SPACE_MD),
+            ft.Row([import_button, open_folder_button], spacing=SPACE_MD),
             ft.Divider(),
             search_field,
             list_column,
         ],
-        spacing=12,
+        spacing=SPACE_LG,
         scroll=ft.ScrollMode.AUTO,
+        margin=scroll_margin(),
     )
 
     return ft.View(
@@ -607,7 +613,7 @@ async def _pick_editor_path() -> Optional[str]:
     tabs, not a View of its own, so it has no `services=[...]` slot to
     attach a `ft.FilePicker` to the way build_view() does for this
     widget's own screen - and `page.services`/`page.overlay` both proxy
-    to the page's current root view, which `multitool/app.py`'s
+    to the page's current root view, which `toolblox/app.py`'s
     route_change() clears before rebuilding, so touching either while a
     view is still under construction raises "views list is empty."
     Running the same tkinter-based subprocess pattern
@@ -703,18 +709,16 @@ def build_settings(page: ft.Page) -> ft.Control:
 
     return ft.Column(
         [
-            ft.Text(
+            text_caption(
                 "The app macros open in when you press Edit, the same as Windows' "
-                'own "Open with" - never edited inline in this widget.',
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                'own "Open with" - never edited inline in this widget.'
             ),
             ft.Row(
                 [
-                    ft.Text("Opens with:", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                    text_caption("Opens with:"),
                     current_editor_text,
                 ],
-                spacing=6,
+                spacing=SPACE_SM,
             ),
             ft.Row(
                 [
@@ -725,18 +729,16 @@ def build_settings(page: ft.Page) -> ft.Control:
                     reset_button,
                 ],
                 wrap=True,
-                spacing=8,
+                spacing=SPACE_SM,
             ),
             ft.Divider(),
-            ft.Text(
+            text_caption(
                 "AutoHotkey executable (Windows only). Auto-detected on the PATH "
-                "or a common install location if left blank.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "or a common install location if left blank."
             ),
-            ft.Row([path_field, detect_button]),
+            ft.Row([path_field, detect_button], spacing=SPACE_MD),
         ],
-        spacing=8,
+        spacing=SPACE_SM,
     )
 
 

@@ -4,7 +4,7 @@ A borderless, topmost window covering the whole screen, dimmed so the
 selected rectangle stands out against it. Click and drag to draw a
 rectangle; press Enter to confirm it or Escape to cancel. Prints exactly
 one JSON line and exits, the same one-shot subprocess pattern
-multitool/roblox/login.py uses: `{"x", "y", "width", "height"}` on
+toolblox/roblox/login.py uses: `{"x", "y", "width", "height"}` on
 confirm, or `{"cancelled": true}` on cancel. Printing nothing at all
 (e.g. the window was closed some other way) is treated by the caller
 the same as a cancel.

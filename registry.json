@@ -10,12 +10,12 @@
       "icon": null,
       "source": {
         "owner": "BakedAleska",
-        "repo": "Multitool",
+        "repo": "Toolblox",
         "ref": "e29faf77ff085cb3c91bc9c8398bae99d1c38a6b",
         "path": "widgets/autoclicker"
       },
-      "sha256": "ece8e0d4576611e0eb8ac2145e54af3d66626f61a05b5883092606a2bc0e2b16",
-      "homepage": "https://github.com/BakedAleska/Multitool/tree/main/widgets/autoclicker"
+      "sha256": "976a4b42642088f7e97dfe140989b79d49ba9028ff3188e49956aca6cd79147d",
+      "homepage": "https://github.com/BakedAleska/Toolblox/tree/main/widgets/autoclicker"
     },
     {
       "id": "image_overlay",
@@ -26,12 +26,12 @@
       "icon": null,
       "source": {
         "owner": "BakedAleska",
-        "repo": "Multitool",
+        "repo": "Toolblox",
         "ref": "6c1c19d99d3239bd017077aa8a69fa227a73c53a",
         "path": "widgets/image_overlay"
       },
-      "sha256": "98d122c054134bb2911ee15216e122e9522a292f599323e4005b39c192f47d47",
-      "homepage": "https://github.com/BakedAleska/Multitool/tree/main/widgets/image_overlay"
+      "sha256": "365a5be4c6fc1e382621c7b048d9041c4576238ec4139f34094ce5adf5c2dfe0",
+      "homepage": "https://github.com/BakedAleska/Toolblox/tree/main/widgets/image_overlay"
     }
   ]
 }

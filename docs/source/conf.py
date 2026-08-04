@@ -1,11 +1,11 @@
-"""Sphinx configuration for the Multitool documentation.
+"""Sphinx configuration for the Toolblox documentation.
 
 Docs are built from docstrings via ``sphinx.ext.autodoc``. Run
 ``sphinx-apidoc`` and ``sphinx-build`` as described in the project's
 CLAUDE.md whenever modules are added, removed, or renamed.
 
 ``exclude_patterns`` drops sphinx-apidoc's own aggregator pages
-(``multitool namespace``, ``multitool.data namespace``, and so on) from
+(``toolblox namespace``, ``toolblox.data namespace``, and so on) from
 the build. Their navigation is replaced by the hand-written group pages
 (``core.rst``, ``data.rst``, ``roblox.rst``, ``ui.rst``, ``widgets.rst``),
 which give the sidebar readable labels instead of dotted module paths.
@@ -18,7 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../.."))
 
-project = "Multitool"
+project = "Toolblox"
 copyright = "BakedAleska"
 author = "BakedAleska"
 
@@ -34,11 +34,11 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
     "api/modules.rst",
-    "api/multitool.rst",
-    "api/multitool.data.rst",
-    "api/multitool.roblox.rst",
-    "api/multitool.ui.rst",
-    "api/multitool.widgets.rst",
+    "api/toolblox.rst",
+    "api/toolblox.data.rst",
+    "api/toolblox.roblox.rst",
+    "api/toolblox.ui.rst",
+    "api/toolblox.widgets.rst",
 ]
 
 autodoc_default_options = {
@@ -54,4 +54,4 @@ autodoc_default_options = {
 default_role = "literal"
 
 html_theme = "furo"
-html_title = "Multitool"
+html_title = "Toolblox"

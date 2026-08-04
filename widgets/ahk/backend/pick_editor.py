@@ -4,7 +4,7 @@ Prints exactly one JSON line and exits, the same one-shot subprocess
 pattern widgets/image_overlay/backend/area_picker.py uses for its own
 fullscreen area picker: `{"path": "..."}` if a file was chosen, or
 `{"path": null}` if the dialog was cancelled. Run as a subprocess rather
-than importing tkinter directly into Multitool's own process, since
+than importing tkinter directly into Toolblox's own process, since
 tkinter needs its own mainloop and Flet's asyncio event loop already
 occupies the main thread.
 """

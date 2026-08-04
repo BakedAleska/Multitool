@@ -6,8 +6,8 @@ The widget plugin system: discovery, the Catalogue, and installation.
 .. toctree::
    :maxdepth: 1
 
-   API <api/multitool.widgets.api>
-   Catalog <api/multitool.widgets.catalog>
-   Installer <api/multitool.widgets.installer>
-   Loader <api/multitool.widgets.loader>
-   Process <api/multitool.widgets.process>
+   API <api/toolblox.widgets.api>
+   Catalog <api/toolblox.widgets.catalog>
+   Installer <api/toolblox.widgets.installer>
+   Loader <api/toolblox.widgets.loader>
+   Process <api/toolblox.widgets.process>

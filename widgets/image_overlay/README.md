@@ -8,7 +8,7 @@ uses. That window has no picture-viewer chrome and no taskbar entry, so
 nothing about it looks like a window was opened at all.
 
 By default, pressing Start doesn't show the image immediately. It arms a
-background poll (`multitool/roblox/detect.py::is_roblox_running`, checked
+background poll (`toolblox/roblox/detect.py::is_roblox_running`, checked
 every few seconds) that starts the overlay window only while Roblox is
 running, and stops it the moment Roblox closes. Press Stop to disarm it
 entirely.
@@ -63,5 +63,5 @@ Settings -> Widgets, then enable it from the Widgets screen.
 
 ## See also
 
-`multitool/widgets/process.py` is the shared helper any widget can use to
+`toolblox/widgets/process.py` is the shared helper any widget can use to
 start, message, and stop a non-Python backend process like this one.

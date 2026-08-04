@@ -1,7 +1,7 @@
 """Rogue Lineage: track characters, their class, race, notes, and items.
 
 A character's username is always typed in by hand. If it's similar to one
-of Multitool's own tracked accounts, pressing Tab while the field is
+of Toolblox's own tracked accounts, pressing Tab while the field is
 focused autofills the full match - and once it's an exact match, the
 character starts syncing with that account automatically (see
 storage.sync_with_accounts): its username and avatar follow the account
@@ -20,11 +20,23 @@ import asyncio
 
 import flet as ft
 
-from multitool.data import accounts as accounts_store
-from multitool.ui.layout import build_layout, widget_route
-from multitool.ui.style import card_border, radius_card, scroll_margin
-from multitool.ui.toast import show_confirm_toast, show_toast
-from multitool.widgets.api import Widget
+from toolblox.data import accounts as accounts_store
+from toolblox.ui.layout import build_layout, widget_route
+from toolblox.ui.style import (
+    SPACE_LG,
+    SPACE_MD,
+    SPACE_SM,
+    SPACE_XS,
+    card_border,
+    radius_card,
+    scroll_margin,
+    text_caption,
+    text_label,
+    text_section,
+    text_title,
+)
+from toolblox.ui.toast import show_confirm_toast, show_toast
+from toolblox.widgets.api import Widget
 
 from . import reference, storage
 
@@ -140,10 +152,10 @@ def _open_character_dialog(page: ft.Page, existing: dict | None, on_saved) -> No
     )
     username_group = ft.Column(
         [
-            ft.Text("Username", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+            text_caption("Username"),
             username_box,
         ],
-        spacing=4,
+        spacing=SPACE_XS,
     )
     username_focused = False
     current_suggestion: str | None = None
@@ -219,13 +231,11 @@ def _open_character_dialog(page: ft.Page, existing: dict | None, on_saved) -> No
     )
 
     items_state: list[dict] = list(existing.get("items", [])) if existing else []
-    items_column = ft.Column(spacing=4)
+    items_column = ft.Column(spacing=SPACE_XS)
 
     def render_items(mounted: bool = True):
         if not items_state:
-            items_column.controls = [
-                ft.Text("No items added yet.", size=11, color=ft.Colors.ON_SURFACE_VARIANT)
-            ]
+            items_column.controls = [text_caption("No items added yet.")]
         else:
             items_column.controls = [
                 _item_chip(index, item) for index, item in enumerate(items_state)
@@ -251,7 +261,7 @@ def _open_character_dialog(page: ft.Page, existing: dict | None, on_saved) -> No
                 ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            padding=ft.Padding.symmetric(horizontal=10, vertical=2),
+            padding=ft.Padding.symmetric(horizontal=SPACE_SM, vertical=2),
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             border_radius=999,
         )
@@ -353,23 +363,24 @@ def _open_character_dialog(page: ft.Page, existing: dict | None, on_saved) -> No
             content=ft.Column(
                 [
                     username_group,
-                    ft.Row([class_dropdown, class_other]),
-                    ft.Row([race_dropdown, race_other]),
+                    ft.Row([class_dropdown, class_other], spacing=SPACE_MD),
+                    ft.Row([race_dropdown, race_other], spacing=SPACE_MD),
                     notes_field,
                     ft.Divider(),
-                    ft.Text("Items", weight=ft.FontWeight.W_600, size=13),
+                    text_section("Items"),
                     items_column,
-                    ft.Row([item_dropdown, item_other_field]),
+                    ft.Row([item_dropdown, item_other_field], spacing=SPACE_MD),
                     ft.Row(
                         [
                             item_quantity_field,
                             ft.IconButton(
                                 icon=ft.Icons.ADD, tooltip="Add item", on_click=on_add_item
                             ),
-                        ]
+                        ],
+                        spacing=SPACE_MD,
                     ),
                 ],
-                spacing=10,
+                spacing=SPACE_MD,
             ),
             width=440,
         ),
@@ -387,7 +398,7 @@ def build_view(page: ft.Page) -> ft.View:
     with class, race, notes, and items, plus add/edit/delete.
     """
 
-    list_column = ft.Column(spacing=8)
+    list_column = ft.Column(spacing=SPACE_SM)
 
     def delete_character(char_id: str):
         current = storage.load_roster()
@@ -441,30 +452,26 @@ def build_view(page: ft.Page) -> ft.View:
                     ),
                     ft.Row(
                         [
-                            ft.Text(header_text, size=18, weight=ft.FontWeight.W_600),
-                            ft.Text(
-                                subtitle or "No class or race set",
-                                size=16,
-                                color=ft.Colors.ON_SURFACE_VARIANT,
-                            ),
+                            text_label(header_text),
+                            text_caption(subtitle or "No class or race set"),
                             _info_chip("Not linked")
                             if character.get("account_id") is None
                             else ft.Container(),
                         ],
                         expand=True,
-                        spacing=14,
+                        spacing=SPACE_MD,
                         vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     ),
                     ft.IconButton(
                         icon=ft.Icons.DELETE_OUTLINE, tooltip="Delete", on_click=on_delete
                     ),
                 ],
-                spacing=12,
+                spacing=SPACE_MD,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             on_click=on_open,
             ink=True,
-            padding=ft.Padding.symmetric(horizontal=12, vertical=10),
+            padding=ft.Padding.symmetric(horizontal=SPACE_MD, vertical=SPACE_SM),
             border=card_border(),
             border_radius=radius_card(page),
         )
@@ -472,13 +479,7 @@ def build_view(page: ft.Page) -> ft.View:
     def render_list(mounted: bool = True):
         characters = sorted(storage.load_roster(), key=lambda c: c.get("username", "").lower())
         if not characters:
-            list_column.controls = [
-                ft.Text(
-                    "No characters added yet.",
-                    size=12,
-                    color=ft.Colors.ON_SURFACE_VARIANT,
-                )
-            ]
+            list_column.controls = [text_caption("No characters added yet.")]
         else:
             list_column.controls = [character_card(c) for c in characters]
         if mounted:
@@ -517,21 +518,19 @@ def build_view(page: ft.Page) -> ft.View:
         [
             ft.Row(
                 [
-                    ft.Text("Rogue Lineage", size=24, weight=ft.FontWeight.BOLD),
+                    text_title("Rogue Lineage"),
                     ft.FilledButton("Add character", icon=ft.Icons.ADD, on_click=on_add),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
-            ft.Text(
+            text_caption(
                 "Track characters, their class, race, notes, and items. Type a "
                 "username similar to a tracked account and press Tab to "
-                "autofill it - an exact match starts syncing automatically.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "autofill it - an exact match starts syncing automatically."
             ),
             list_column,
         ],
-        spacing=12,
+        spacing=SPACE_LG,
         scroll=ft.ScrollMode.AUTO,
         margin=scroll_margin(),
     )
@@ -547,7 +546,7 @@ def build_view(page: ft.Page) -> ft.View:
 def _info_chip(text: str) -> ft.Control:
     return ft.Container(
         content=ft.Text(text, size=11),
-        padding=ft.Padding.symmetric(horizontal=8, vertical=2),
+        padding=ft.Padding.symmetric(horizontal=SPACE_SM, vertical=2),
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
         border_radius=999,
     )

@@ -3,7 +3,7 @@
 Clicks repeatedly at the cursor. `widget.py` builds the UI with Flet, since
 Flet can only render controls from Python code running in-process, but the
 actual clicking runs as a separate platform script it starts and stops —
-proof that Multitool widgets aren't limited to Python:
+proof that Toolblox widgets aren't limited to Python:
 
 - `backend/click_windows.ps1`, a PowerShell script calling `user32.dll`
   directly. No extra dependencies. Left, middle, and right click.
@@ -28,7 +28,7 @@ pattern instead of a platform script:
 
 - `backend/keybind_listener.py`, using [pynput](https://pynput.readthedocs.io/)
   to listen system-wide for hotkeys, so clicking can be started or
-  stopped without switching focus back to Multitool. Any number of
+  stopped without switching focus back to Toolblox. Any number of
   keybinds can be bound to start, and any number to stop, set from the
   Autoclicker screen by pressing "Add keybind" and then the key
   combination itself. On macOS this needs Accessibility permission
@@ -36,7 +36,7 @@ pattern instead of a platform script:
   global-hotkey tool has there.
 - `backend/overlay.py`, a small always-on-top tkinter window shown in
   the corner of the screen while clicking is active, so it stays
-  visible even when Multitool itself is in the background. Optional,
+  visible even when Toolblox itself is in the background. Optional,
   toggled from the Autoclicker screen. Click-through on Windows; on
   macOS it's topmost but not click-through, tkinter has no equivalent
   there.
@@ -48,5 +48,5 @@ Settings -> Widgets, then enable it from the Widgets screen.
 
 ## See also
 
-`multitool/widgets/process.py` is the shared helper any widget can use to start,
+`toolblox/widgets/process.py` is the shared helper any widget can use to start,
 message, and stop a non-Python backend process like this one.

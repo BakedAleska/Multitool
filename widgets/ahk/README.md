@@ -14,7 +14,7 @@ This widget mirrors the two actions its tray icon actually exposes, instead
 of the one-shot Play/Stop the first version of this widget had:
 
 - **Enable / Disable** - start or terminate the interpreter process for
-  that macro (`multitool/widgets/process.py`, the same "external process"
+  that macro (`toolblox/widgets/process.py`, the same "external process"
   pattern Autoclicker uses for its own backend). Equivalent to launching
   the script, or choosing Exit from its tray icon.
 - **Suspend / Resume hotkeys** - toggle the script's hotkeys on and off
@@ -33,9 +33,9 @@ tracking is best-effort: it reflects the last toggle *this widget* sent,
 and can drift if the script's own hotkey or its tray icon is used to
 suspend it instead. `_MACRO_TEMPLATE` includes an example of a script
 toggling its own suspend state (`F12::Suspend`), the usual pattern for
-flipping a keybind remap on and off without leaving Multitool.
+flipping a keybind remap on and off without leaving Toolblox.
 
-A macro can also be marked "Start with Multitool", auto-enabled by
+A macro can also be marked "Start with Toolblox", auto-enabled by
 `_start_on_app_launch` (`Widget.on_app_start`) - the same mechanism
 Autoclicker uses for its own "Start on launch" toggle - mirroring adding a
 keybind-remap script to Windows startup instead of pressing Enable by hand
@@ -80,6 +80,6 @@ needed - see this repo's `widgets/` folder.
 
 ## See also
 
-`multitool/widgets/process.py` is the shared helper this widget uses to
+`toolblox/widgets/process.py` is the shared helper this widget uses to
 start and stop the AutoHotkey process a macro's Enable/Disable button
 controls.

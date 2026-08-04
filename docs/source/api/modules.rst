@@ -1,7 +1,7 @@
-multitool
+toolblox
 =========
 
 .. toctree::
    :maxdepth: 4
 
-   multitool
+   toolblox

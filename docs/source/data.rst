@@ -6,6 +6,6 @@ Persistence: accounts, settings, and cookie protection.
 .. toctree::
    :maxdepth: 1
 
-   Accounts <api/multitool.data.accounts>
-   Crypto <api/multitool.data.crypto>
-   Settings <api/multitool.data.settings>
+   Accounts <api/toolblox.data.accounts>
+   Crypto <api/toolblox.data.crypto>
+   Settings <api/toolblox.data.settings>

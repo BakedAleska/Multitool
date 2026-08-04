@@ -6,7 +6,7 @@ a named event object, `ROBLOX_singletonEvent`, when `RobloxPlayerBeta.exe`
 starts, and refusing to open a second window if that object already exists.
 That object is destroyed by the OS once nothing holds a handle to it, so
 this helper finds and closes the handle the *already-running* client holds,
-right before Multitool launches another account's session. The next
+right before Toolblox launches another account's session. The next
 instance then finds no existing singleton object and starts normally
 instead of just activating the first window.
 
@@ -46,7 +46,7 @@ privileges: `RobloxPlayerBeta.exe` runs as the same user, so
 against it succeeds without elevation.
 
 The helper always exits 0. It's meant to run as a best-effort step right
-before Multitool launches a join; a failure here should never block the
+before Toolblox launches a join; a failure here should never block the
 join itself. If it can't find or close anything (including when no Roblox
 process is running at all, which is the common case for the *first*
 account's Join), it just does nothing.
@@ -75,7 +75,7 @@ it locates `vcvars64.bat` itself:
 .\native\multi_instance_helper\build.ps1
 ```
 
-This produces `multi_instance_helper.exe` next to `helper.c`. Multitool
+This produces `multi_instance_helper.exe` next to `helper.c`. Toolblox
 loads it from that fixed path at runtime (see
-`multitool/roblox/multi_instance.py`); there's no install step for it yet,
+`toolblox/roblox/multi_instance.py`); there's no install step for it yet,
 which matches this project having no packaging/signing setup in general.

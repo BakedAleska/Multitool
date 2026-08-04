@@ -4,7 +4,7 @@ Its UI is built with Flet, same as any widget: Flet can only render
 controls from Python code running on its own event loop, so that part
 stays Python no matter what. The actual clicking, though, runs entirely
 outside Python, as a platform-native script this file starts, stops, and
-reads status from over stdout (see multitool/widgets/process.py).
+reads status from over stdout (see toolblox/widgets/process.py).
 
 - Windows: backend/click_windows.ps1, a PowerShell script that calls
   user32.dll's mouse_event directly. No extra dependencies.
@@ -18,13 +18,13 @@ way:
 
 - backend/keybind_listener.py, using pynput to listen system-wide for
   configured start/stop hotkeys, so clicking can be toggled without
-  switching focus back to Multitool. The same key can be bound as both
+  switching focus back to Toolblox. The same key can be bound as both
   the start and the stop keybind for one Autoclicker instance: pressing
   it then acts like a NOT gate on the running state, on if it was off
   and off if it was on, rather than needing separate keys for each
   direction.
 - backend/overlay.py, a small always-on-top tkinter window shown while
-  clicking is active, so it's visible even when Multitool itself is in
+  clicking is active, so it's visible even when Toolblox itself is in
   the background.
 
 To try this widget locally, copy this folder into WIDGETS_DIR (the path
@@ -38,11 +38,21 @@ from pathlib import Path
 
 import flet as ft
 
-from multitool.state import get_widget_setting, set_widget_setting
-from multitool.ui.layout import build_layout, widget_route
-from multitool.ui.toast import show_toast
-from multitool.widgets.api import Widget
-from multitool.widgets.process import WidgetProcess, start_process, stop_process
+from toolblox.state import get_widget_setting, set_widget_setting
+from toolblox.ui.layout import build_layout, widget_route
+from toolblox.ui.style import (
+    SPACE_LG,
+    SPACE_MD,
+    SPACE_SM,
+    scroll_margin,
+    text_caption,
+    text_label,
+    text_section,
+    text_title,
+)
+from toolblox.ui.toast import show_toast
+from toolblox.widgets.api import Widget
+from toolblox.widgets.process import WidgetProcess, start_process, stop_process
 
 BACKEND_DIR = Path(__file__).parent / "backend"
 
@@ -257,7 +267,7 @@ def build_view(page: ft.Page) -> ft.View:
     """
 
     status_text = ft.Text("Running" if already_running else "Stopped", weight=ft.FontWeight.W_600)
-    count_text = ft.Text("Clicks: 0", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+    count_text = text_caption("Clicks: 0")
     speed_label, speed_helper, speed_value = _speed_field_props(speed_unit, DEFAULT_CPS)
     cps_field = ft.TextField(
         label=speed_label,
@@ -286,8 +296,8 @@ def build_view(page: ft.Page) -> ft.View:
     start_button = ft.FilledButton("Start", disabled=already_running)
     stop_button = ft.FilledButton("Stop", disabled=not already_running)
 
-    start_chips_row = ft.Row(wrap=True, spacing=6)
-    stop_chips_row = ft.Row(wrap=True, spacing=6)
+    start_chips_row = ft.Row(wrap=True, spacing=SPACE_SM)
+    stop_chips_row = ft.Row(wrap=True, spacing=SPACE_SM)
     add_start_button = ft.OutlinedButton("Add keybind", icon=ft.Icons.ADD)
     add_stop_button = ft.OutlinedButton("Add keybind", icon=ft.Icons.ADD)
     capture_hint = ft.Text(
@@ -585,34 +595,30 @@ def build_view(page: ft.Page) -> ft.View:
 
     content = ft.Column(
         [
-            ft.Text("Autoclicker", size=24, weight=ft.FontWeight.BOLD),
-            ft.Text(
+            text_title("Autoclicker"),
+            text_caption(
                 "Repeatedly clicks at the current cursor position. Its click "
                 "loop runs as a separate platform script, not Python. Move "
-                "the cursor to where you want it clicking before pressing Start.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "the cursor to where you want it clicking before pressing Start."
             ),
-            ft.Row([cps_field, button_group]),
-            ft.Row([indicator_checkbox, randomize_checkbox]),
-            ft.Row([start_button, stop_button]),
+            ft.Row([cps_field, button_group], spacing=SPACE_MD),
+            ft.Row([indicator_checkbox, randomize_checkbox], spacing=SPACE_MD),
+            ft.Row([start_button, stop_button], spacing=SPACE_MD),
             status_text,
             count_text,
             ft.Divider(),
             capture_hint,
-            ft.Text("Turn on with", weight=ft.FontWeight.W_600),
-            ft.Text(
-                "Any of these keys works globally, even while another window "
-                "has focus.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+            text_section("Turn on with"),
+            text_caption(
+                "Any of these keys works globally, even while another window has focus."
             ),
-            ft.Row([start_chips_row, add_start_button], wrap=True, spacing=8),
-            ft.Text("Turn off with", weight=ft.FontWeight.W_600),
-            ft.Row([stop_chips_row, add_stop_button], wrap=True, spacing=8),
+            ft.Row([start_chips_row, add_start_button], wrap=True, spacing=SPACE_SM),
+            text_section("Turn off with"),
+            ft.Row([stop_chips_row, add_stop_button], wrap=True, spacing=SPACE_SM),
         ],
-        spacing=12,
+        spacing=SPACE_LG,
         scroll=ft.ScrollMode.AUTO,
+        margin=scroll_margin(),
     )
 
     return ft.View(
@@ -642,12 +648,10 @@ def build_settings(page: ft.Page) -> ft.Control:
 
     return ft.Column(
         [
-            ft.Text("Speed unit", weight=ft.FontWeight.W_500),
-            ft.Text(
+            text_label("Speed unit"),
+            text_caption(
                 "Whether the Autoclicker screen's speed field works in "
-                "clicks-per-second or interval-in-milliseconds.",
-                size=12,
-                color=ft.Colors.ON_SURFACE_VARIANT,
+                "clicks-per-second or interval-in-milliseconds."
             ),
             ft.RadioGroup(
                 value=speed_unit,
@@ -660,7 +664,7 @@ def build_settings(page: ft.Page) -> ft.Control:
                 ),
             ),
         ],
-        spacing=8,
+        spacing=SPACE_SM,
     )
 
 

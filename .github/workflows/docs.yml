@@ -22,7 +22,7 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Generate API stubs
-        run: sphinx-apidoc --implicit-namespaces -f -e -o docs/source/api multitool
+        run: sphinx-apidoc --implicit-namespaces -f -e -o docs/source/api toolblox
 
       - name: Build HTML
         run: sphinx-build -b html docs/source docs/build

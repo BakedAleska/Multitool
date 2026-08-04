@@ -6,4 +6,4 @@ line-length = 100
 select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["multitool"]
+known-first-party = ["toolblox"]

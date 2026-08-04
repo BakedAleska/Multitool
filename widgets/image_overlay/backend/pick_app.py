@@ -5,7 +5,7 @@ pattern widgets/image_overlay/backend/area_picker.py and
 widgets/ahk/backend/pick_editor.py use for their own dialogs:
 `{"path": "..."}` if a file was chosen, or `{"path": null}` if the dialog
 was cancelled. Run as a subprocess rather than importing tkinter directly
-into Multitool's own process, since tkinter needs its own mainloop and
+into Toolblox's own process, since tkinter needs its own mainloop and
 Flet's asyncio event loop already occupies the main thread.
 """
 

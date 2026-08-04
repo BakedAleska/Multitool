@@ -9,8 +9,8 @@
 Clone the repo and create a virtual environment:
 
 ```
-git clone https://github.com/BakedAleska/Multitool.git
-cd Multitool
+git clone https://github.com/BakedAleska/Toolblox.git
+cd Toolblox
 python -m venv .venv
 ```
 
@@ -39,7 +39,7 @@ python main.py
 ## Linting and type checking
 
 ```
-ruff check multitool/ main.py
+ruff check toolblox/ main.py
 pyright
 ```
 

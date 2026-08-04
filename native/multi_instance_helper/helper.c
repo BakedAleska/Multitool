@@ -8,7 +8,7 @@
  * object (ROBLOX_singletonEvent) on launch and bailing out if it already
  * exists. That object is destroyed by the OS once nothing holds a handle
  * to it, so this closes the handle the *already-running* client holds,
- * right before Multitool launches another account's session. This is the
+ * right before Toolblox launches another account's session. This is the
  * same category of technique used by several existing, widely used
  * open-source Roblox multi-instance tools (e.g. Bloxstrap's multi-instance
  * launching), confirmed here by dumping RobloxPlayerBeta.exe's actual

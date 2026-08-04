@@ -6,11 +6,11 @@ Flet views: every screen in the app.
 .. toctree::
    :maxdepth: 1
 
-   Accounts <api/multitool.ui.accounts>
-   Dashboard <api/multitool.ui.dashboard>
-   Join action <api/multitool.ui.join_action>
-   Layout <api/multitool.ui.layout>
-   Settings <api/multitool.ui.settings>
-   Style <api/multitool.ui.style>
-   Toast <api/multitool.ui.toast>
-   Widgets <api/multitool.ui.widgets>
+   Accounts <api/toolblox.ui.accounts>
+   Dashboard <api/toolblox.ui.dashboard>
+   Join action <api/toolblox.ui.join_action>
+   Layout <api/toolblox.ui.layout>
+   Settings <api/toolblox.ui.settings>
+   Style <api/toolblox.ui.style>
+   Toast <api/toolblox.ui.toast>
+   Widgets <api/toolblox.ui.widgets>
