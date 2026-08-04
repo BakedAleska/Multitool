@@ -103,6 +103,12 @@ jobs:
 
       - name: Compile installer
         shell: bash
+        env:
+          # Git Bash's MSYS layer mangles any argument starting with "/<letter>"
+          # as a POSIX path (e.g. "/DMyAppVersion=..." looks like a drive-letter
+          # path to it), which corrupts ISCC's /D switches before it ever sees
+          # them. This disables that path conversion for this step only.
+          MSYS_NO_PATHCONV: "1"
         run: |
           set -eu
           VERSION="${{ needs.version.outputs.app-version }}"
