@@ -219,9 +219,17 @@ def apply_update(zip_path: Path) -> None:
     docstring for what happens next. Raises UpdateError if the helper
     isn't where it's expected to be, which would mean a build that
     forgot to bundle it rather than anything the user did.
+
+    ToolbloxUpdater.exe is found via sys._MEIPASS, not install_dir: a
+    PyInstaller onedir build (since 6.0) keeps only the main exe next
+    to install_dir - everything else --add-binary bundles lands under
+    _internal/ instead, and sys._MEIPASS always points there. Same
+    pattern toolblox/roblox/multi_instance.py uses for its own bundled
+    helper.
     """
     install_dir = Path(sys.executable).resolve().parent
-    helper_path = install_dir / UPDATER_HELPER_NAME
+    resources_dir = Path(getattr(sys, "_MEIPASS", install_dir))
+    helper_path = resources_dir / UPDATER_HELPER_NAME
     if not helper_path.is_file():
         raise UpdateError(
             f"This install is missing {UPDATER_HELPER_NAME}. "

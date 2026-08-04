@@ -141,11 +141,25 @@ def apply_update(pid: int, install_dir: Path, zip_path: Path, exe_name: str) -> 
 
     shutil.rmtree(old_dir, ignore_errors=True)
 
-    subprocess.Popen([str(install_dir / exe_name)], close_fds=True)
+    try:
+        subprocess.Popen([str(install_dir / exe_name)], close_fds=True)
+    except OSError:
+        logger.exception(
+            "Update applied, but couldn't relaunch %s - it needs to be started by hand",
+            exe_name,
+        )
 
 
 def main() -> None:
-    """Parse argv and run apply_update(). See this module's docstring."""
+    """Parse argv and run apply_update(). See this module's docstring.
+
+    Logs any failure and exits non-zero rather than letting an
+    exception propagate: this is a --noconsole build (see
+    release/build.py's _build_updater_helper), and an unhandled
+    exception in a windowed PyInstaller app can pop a blocking Windows
+    error dialog with nobody around to dismiss it, which would look
+    like the update hung forever instead of just failing.
+    """
     parser = argparse.ArgumentParser(description="Toolblox in-place updater")
     parser.add_argument("--pid", type=int, required=True)
     parser.add_argument("--install-dir", type=Path, required=True)
@@ -157,7 +171,7 @@ def main() -> None:
         apply_update(args.pid, args.install_dir, args.zip, args.exe_name)
     except Exception:
         logger.exception("Update failed")
-        raise
+        sys.exit(1)
 
 
 if __name__ == "__main__":
