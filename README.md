@@ -1,76 +1,42 @@
-## Requirements
+<p align="center">
+  <img src="assets/splash.svg" alt="Toolblox">
+</p>
 
-- Python 3.13
-- Windows (primary target) or macOS
-- On Windows, the WebView2 runtime (preinstalled on most Windows 10/11 systems)
+## Widgets
 
-## Setup
+Widgets add game-specific functionality to Toolblox. It's open source, so build one to suit your own needs and share it.
 
-Clone the repo and create a virtual environment:
+## Is my account safe?
+
+Yes. Login opens Roblox's own page in a separate window (`toolblox/roblox/login.py`), so Toolblox never sees your password. Only your session is kept, encrypted via Windows Credential storage or macOS Keychain, and it never leaves your computer. See `toolblox/data/crypto.py` and `toolblox/data/accounts.py`.
+
+## A note on AI
+
+This project is built with substantial help from Claude Code (Anthropic). Every change is reviewed before merging, and the codebase is small enough to audit yourself.
+
+## Downloading
+
+Get the [latest release](https://github.com/BakedAleska/Toolblox/releases/latest).
+
+## Building from source
+
+For development only. Requires Python 3.13, Windows or macOS, and (Windows only) the WebView2 runtime, usually preinstalled.
 
 ```
 git clone https://github.com/BakedAleska/Toolblox.git
 cd Toolblox
 python -m venv .venv
-```
-
-Activate the virtual environment:
-
-```
-# Windows
-.venv\Scripts\activate
-
-# macOS
-source .venv/bin/activate
-```
-
-Install dependencies:
-
-```
+.venv\Scripts\activate # Windows
+source .venv/bin/activate # macOS
 pip install -r requirements.txt
-```
-
-## Running
-
-```
 python main.py
 ```
 
-## Linting and type checking
+Lint and type-check with `ruff check toolblox/ main.py` and `pyright`.
 
-```
-ruff check toolblox/ main.py
-pyright
-```
+## More info
 
-## Documentation
-
-The Sphinx API documentation lives on the `docs` branch, not `main`.
-
-## Preparing for alpha
-
-This project is preparing for its first alpha release. Two things follow
-from that:
-
-- Every change should be verified and cross-checked against the existing
-  codebase before it's written. Check whether a problem is already solved
-  somewhere in the app rather than adding a roundabout new solution next
-  to an existing one.
-- The three widgets shipping with the alpha are Autohotkey, Autoclicker,
-  and Image Overlay. The Rogue Lineage widget in `widgets/rogue_lineage/`
-  is for personal use only and isn't part of the alpha release.
-- The alpha is the "alpha" release channel (see
-  `toolblox.devtools.release_channel`): no Catalogue, a curated widget
-  set. Running from a source checkout is the "canary" channel instead -
-  Catalogue enabled, today's widgets, expect breakage. See CLAUDE.md's
-  Developer mode section.
-
-## Widget development
-
-An installed widget (under `WIDGETS_DIR`, see Settings -> Widgets for the
-path on your machine) is a separate copy from its source in this repo's
-`widgets/` folder. Editing a widget's source here does not update an
-already-installed copy. For now, changes have to be copied over manually
-(or reinstalled through the Catalogue) to be picked up. Automatically
-syncing an installed widget with its repo source during development is
-not implemented yet.
+- API docs live on the `docs` branch, not `main`.
+- See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
+- Found a bug or have a question? Open an [issue](https://github.com/BakedAleska/Toolblox/issues).
+- MIT license - see [LICENSE](LICENSE).
