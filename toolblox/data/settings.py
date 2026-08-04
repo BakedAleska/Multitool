@@ -23,7 +23,7 @@ DEFAULTS = {
     "widget_settings": {},
     "multi_instance": False,
     "open_on_launch": False,
-    "run_in_background": False,
+    "run_in_background": True,
     "widgets_start_on_launch": [],
 }
 
