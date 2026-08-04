@@ -34,6 +34,20 @@ def is_dev_environment() -> bool:
     return not getattr(sys, "frozen", False)
 
 
+def release_channel() -> str:
+    """The build's release channel: "alpha" or "canary".
+
+    A packaged build is always "alpha" - the curated, publicly
+    advertised release with no Catalogue. Running from a source
+    checkout is "canary": the Catalogue and today's widgets are
+    enabled, since they change often and haven't been vetted for a
+    general audience yet. There's no separate packaged Canary build,
+    so this always tracks is_dev_environment() rather than being
+    flipped by hand anywhere.
+    """
+    return "canary" if is_dev_environment() else "alpha"
+
+
 def dev_widgets_dir() -> Optional[Path]:
     """This repo's widgets/ folder, if running from source, else None.
 

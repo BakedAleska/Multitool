@@ -217,9 +217,10 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
             padding=ft.Padding.symmetric(horizontal=6, vertical=2),
             border_radius=6,
             tooltip=(
-                "Running from a source checkout: widgets and the Catalogue "
-                "load straight from this repo instead of an installed copy. "
-                "See CLAUDE.md's Developer mode section."
+                "Running from a source checkout, on the Canary channel: "
+                "widgets and the Catalogue load straight from this repo "
+                "instead of an installed copy. See CLAUDE.md's Developer "
+                "mode section."
             ),
         ),
         right=8,
