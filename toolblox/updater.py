@@ -129,13 +129,14 @@ def _fetch_expected_sha256(sha256_url: str) -> str:
     Raises UpdateError with a user-facing message on any failure.
     """
     try:
-        response = httpx.get(sha256_url, timeout=15)
+        response = httpx.get(sha256_url, follow_redirects=True, timeout=15)
         response.raise_for_status()
     except httpx.HTTPError as e:
         logger.warning("Couldn't download update checksum: %s", e)
         raise UpdateError(f"Couldn't verify the update. Is your connection working? ({e})") from e
 
-    digest = response.text.strip().split()[0].lower()
+    parts = response.text.split()
+    digest = parts[0].lower() if parts else ""
     if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
         raise UpdateError("The update's published checksum looks malformed.")
     return digest
