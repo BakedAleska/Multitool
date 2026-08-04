@@ -1,10 +1,3 @@
-## Testing the Catalogue
-
-The Catalogue only renders on the Canary channel. Running from source
-isn't enough by itself - set `TOOLBLOX_ENABLE_CANARY` to
-`i-understand-this-is-unvetted` (see `.env.example`) in a local `.env`
-file to opt in deliberately.
-
 ## Commits and Pull Requests
 
 - Follow [Conventional Commits](https://www.conventionalcommits.org/)

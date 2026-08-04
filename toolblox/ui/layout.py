@@ -228,15 +228,12 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
             padding=ft.Padding.symmetric(horizontal=6, vertical=2),
             border_radius=6,
             tooltip=(
-                "Running from a source checkout, on the Canary channel: "
-                "widgets and the Catalogue load straight from this repo "
-                "instead of an installed copy."
+                "Running from a source checkout: widgets and the Catalogue "
+                "load straight from this repo instead of an installed copy."
                 if has_canary_access()
                 else (
                     "Running from a source checkout. Widgets load straight "
-                    "from this repo, but the Canary channel (and its "
-                    "Catalogue) needs an explicit opt-in - see "
-                    "CONTRIBUTING.md."
+                    "from this repo."
                 )
             ),
         ),

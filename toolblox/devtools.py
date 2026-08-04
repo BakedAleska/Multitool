@@ -59,13 +59,15 @@ def has_canary_access() -> bool:
     """Whether TOOLBLOX_ENABLE_CANARY is set to its exact opt-in phrase.
 
     This isn't a real access control - the repo is public, so anyone
-    can read this check and satisfy it. The point is deliberateness:
+    who reads this check can satisfy it. The point is deliberateness:
     running from source alone (is_dev_environment()) used to be enough
     to land on Canary, which meant a plain `git clone` + `python
     main.py` got you the Catalogue and unvetted widgets by accident.
     Requiring an exact phrase, rather than any truthy value, means
-    landing on Canary takes reading CONTRIBUTING.md and typing it in on
-    purpose, not just setting some env var on a hunch.
+    landing on Canary takes finding this check and typing it in on
+    purpose, not just setting some env var on a hunch. Deliberately not
+    documented anywhere outside this module - if someone finds it by
+    reading the source, that's fine.
     """
     value = os.environ.get(CANARY_OPT_IN_NAME) or _dotenv_value(CANARY_OPT_IN_NAME)
     return value == CANARY_OPT_IN_VALUE
