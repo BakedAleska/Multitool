@@ -55,6 +55,15 @@ async def restore_nav_scroll(page: ft.Page) -> None:
     clicking a widget doesn't visually reset the list to the top. Call this
     after `page.update()` in the route change handler.
 
+    Only does this when landing on a widget's own route. The four core
+    destinations (Dashboard/Accounts/Widgets/Settings) always sit in the
+    list's first few rows, reachable with no scrolling at all, so they
+    have no need for a remembered offset - and reapplying one anyway
+    would still show the same reset-then-snap-back flicker described
+    below, on every single core navigation, for no benefit. Restoring is
+    limited to the one case the feature exists for: staying put when
+    a scrolled-down widget list is used to jump between widgets.
+
     The new control reaches the Flutter client asynchronously, and a
     `scroll_to` sent before the client has finished laying it out is silently
     dropped rather than queued. Sending it once, immediately, means the jump
@@ -64,6 +73,8 @@ async def restore_nav_scroll(page: ft.Page) -> None:
     same offset until the client has actually mounted the list, so it lands
     on the first attempt that's not too early.
     """
+    if not page.route.startswith("/widgets/"):
+        return
     control = page.session.store.get(_SCROLL_CONTROL_KEY)
     offset = page.session.store.get(_SCROLL_OFFSET_KEY)
     if control is None or not offset:
