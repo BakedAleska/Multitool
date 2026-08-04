@@ -2,8 +2,14 @@
 
 pywebview needs to own the main thread. Flet's own event loop already
 occupies the main thread in the parent process, so this module is
-launched separately with `python -m toolblox.roblox.login` (see
-toolblox/ui/accounts.py) instead of being embedded in the main app.
+launched separately (see toolblox/ui/accounts.py) instead of being
+embedded in the main app. Running from source, that's `python -m
+toolblox.roblox.login`, since `sys.executable` is a real interpreter
+there. A frozen build has no such interpreter to invoke - its
+`sys.executable` is the packaged app itself - so accounts.py instead
+relaunches that same executable with the `LOGIN_ARG` flag, which
+main.py checks for and dispatches to `main()` here instead of the
+normal app.
 
 IPC with the parent process is a single JSON line on stdout. This
 process never prints anything else.
@@ -24,6 +30,11 @@ LOGIN_URL = "https://www.roblox.com/login"
 AUTH_URL = "https://users.roblox.com/v1/users/authenticated"
 THUMBNAIL_URL = "https://thumbnails.roblox.com/v1/users/avatar-headshot"
 SECURITY_COOKIE_NAME = ".ROBLOSECURITY"
+
+LOGIN_ARG = "--roblox-login"
+"""CLI flag that tells a frozen build's relaunched exe to run this
+module's main() instead of the normal app. See this module's
+docstring and main.py."""
 
 POLL_INTERVAL_SECONDS = 1.0
 

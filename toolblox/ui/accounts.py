@@ -12,6 +12,7 @@ import httpx
 from toolblox.data import accounts as accounts_store
 from toolblox.logs import get_logger
 from toolblox.roblox import status as status_tracker
+from toolblox.roblox.login import LOGIN_ARG
 from toolblox.roblox.process_watch import running_pids
 from toolblox.state import get_compact_mode, get_show_avatars, get_sort_order
 from toolblox.ui.join_action import join_with_account
@@ -235,18 +236,22 @@ def AccountsView(page: ft.Page) -> ft.View:
     async def open_add_account(e: ft.Event[ft.IconButton]):
         """Run the Roblox login flow and add the resulting account.
 
-        Spawns ``python -m toolblox.roblox.login`` as a subprocess and reads
-        the JSON line it prints to stdout on success. See that module's
-        docstring for why it must run separately.
+        Spawns ``python -m toolblox.roblox.login`` as a subprocess (or, for
+        a frozen build, this same exe relaunched with LOGIN_ARG - see that
+        module's docstring) and reads the JSON line it prints to stdout on
+        success.
         """
         add_button.disabled = True
         page.update()
 
+        if getattr(sys, "frozen", False):
+            command = [sys.executable, LOGIN_ARG]
+        else:
+            command = [sys.executable, "-m", "toolblox.roblox.login"]
+
         try:
             proc = await asyncio.create_subprocess_exec(
-                sys.executable,
-                "-m",
-                "toolblox.roblox.login",
+                *command,
                 cwd=PROJECT_ROOT,
                 stdout=asyncio.subprocess.PIPE,
             )
