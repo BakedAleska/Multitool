@@ -1,0 +1,7 @@
+toolblox.updater\_helper module
+===============================
+
+.. automodule:: toolblox.updater_helper
+   :members:
+   :show-inheritance:
+   :undoc-members:
