@@ -1,4 +1,4 @@
-; Toolblox installer (alpha).
+; Toolblox installer (beta).
 ;
 ; This is a bootstrapper, not a full offline installer: it downloads the
 ; actual application build from a GitHub release at install time instead of
@@ -53,7 +53,7 @@ WizardStyle=modern
 ArchiveExtraction=full
 DisableWelcomePage=no
 AppReadmeFile=https://github.com/BakedAleska/Toolblox
-VersionInfoDescription=Toolblox installer (alpha)
+VersionInfoDescription=Toolblox installer (beta)
 ; Lets this same installer double as the updater toolblox/updater.py
 ; launches from inside a running app: if Toolblox.exe is still open when
 ; its own update relaunches this installer, close it automatically instead

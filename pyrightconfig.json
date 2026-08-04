@@ -1,4 +1,5 @@
 {
+  "include": ["toolblox", "main.py", "release"],
   "typeCheckingMode": "basic",
   "reportArgumentType": "warning"
 }

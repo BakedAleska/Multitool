@@ -6,7 +6,7 @@ native multi-instance helper. Produces a single zip in dist/, named to
 match what installer/Toolblox.iss downloads and toolblox/updater.py
 checks for, and prints its sha256 so both can be updated for a release.
 
-Every packaged build is the "alpha" release channel - see
+Every packaged build is the "beta" release channel - see
 toolblox.devtools.release_channel. There's no separate packaged build for
 "canary"; that's what running from source already is.
 
@@ -34,7 +34,7 @@ BUILD_DIR = REPO_ROOT / "build"
 
 
 def _numeric_version() -> str:
-    """APP_VERSION with any "-suffix" (e.g. "-alpha") dropped."""
+    """APP_VERSION with any "-suffix" (e.g. "-beta") dropped."""
     return APP_VERSION.split("-")[0]
 
 
@@ -117,8 +117,8 @@ def _build_macos() -> Path:
     """Pack the macOS build and return the resulting .app bundle.
 
     Unsigned - Gatekeeper will require a right-click -> Open the first
-    time a user runs it. See CLAUDE.md's "Known risks / open decisions"
-    for the signing/notarization decision this is deferring.
+    time a user runs it. Signing/notarization is a deliberately
+    deferred decision.
     """
     _run_flet_pack(
         [

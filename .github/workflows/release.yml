@@ -1,8 +1,8 @@
 name: Build and publish a release
 
-# Triggered by pushing a version tag (e.g. `v0.1.0-alpha`), which must match
+# Triggered by pushing a version tag (e.g. `v0.1.0-beta`), which must match
 # toolblox.version.APP_VERSION with a leading "v" - see that module's
-# docstring. Every build here is the packaged "alpha" release channel (see
+# docstring. Every build here is the packaged "beta" release channel (see
 # toolblox.devtools.release_channel); there's no separate packaged build
 # for "canary".
 #
@@ -14,8 +14,8 @@ name: Build and publish a release
 # release) still works.
 #
 # All builds are unsigned for now: Windows SmartScreen and macOS Gatekeeper
-# will both warn on first run. See CLAUDE.md's "Known risks / open
-# decisions" for the signing/notarization decision this is deferring.
+# will both warn on first run. Signing/notarization (EV cert vs. documented
+# "Run anyway" instructions) is a deliberately deferred decision.
 
 on:
   push:
@@ -115,10 +115,20 @@ jobs:
             "/DDownloadSHA256=${SHA256}" \
             installer/Toolblox.iss
 
+      - name: Checksum installer
+        shell: bash
+        run: |
+          set -eu
+          for exe in installer/Output/ToolbloxSetup-*.exe; do
+            sha256sum "$exe" | cut -d' ' -f1 > "${exe}.sha256"
+          done
+
       - uses: actions/upload-artifact@v4
         with:
           name: dist-installer
-          path: installer/Output/ToolbloxSetup-*.exe
+          path: |
+            installer/Output/ToolbloxSetup-*.exe
+            installer/Output/ToolbloxSetup-*.exe.sha256
           if-no-files-found: error
 
   release:

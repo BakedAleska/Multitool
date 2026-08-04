@@ -1,7 +1,7 @@
 """The Widgets screen: the Catalogue banner and the grid of installed widgets.
 
 The Catalogue only renders on the "canary" release channel (see
-toolblox.devtools.release_channel) - a packaged "alpha" build shows just
+toolblox.devtools.release_channel) - a packaged "beta" build shows just
 the installed-widgets grid, with no shop, no background fetch, and no
 update badges, since those all depend on a fetched Catalogue.
 """
@@ -128,7 +128,7 @@ def WidgetsView(page: ft.Page) -> ft.View:
     every build and set inside background_refresh_catalogue itself,
     before it calls refresh(). This guard matters: refresh() rebuilds
     this view, so an unconditional fetch here would trigger another
-    fetch on every rebuild, without end. On "alpha", none of this runs -
+    fetch on every rebuild, without end. On "beta", none of this runs -
     the Catalogue section, its background fetch, and the per-widget
     update badges it feeds are skipped entirely.
 
