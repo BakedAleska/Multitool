@@ -59,6 +59,7 @@ from toolblox.ui.toast import show_toast
 from toolblox.updater import UpdateError, check_for_update, download_installer, run_installer
 from toolblox.version import APP_VERSION
 from toolblox.widgets.loader import discover_widgets
+from toolblox.widgets.process import stop_all_processes
 
 _SETTINGS_FOCUS_WIDGET_KEY = "_settings_focus_widget_id"
 _SETTINGS_SCROLL_KEY = "_settings_scroll_offsets"
@@ -186,12 +187,18 @@ def SettingsView(page: ft.Page) -> ft.View:
         rebuild_settings()
 
     async def on_install_update(e: ft.Event[ft.Button]):
-        """Download the update installer, launch it, then close the app.
+        """Download the update installer, launch it, then fully exit the app.
 
         The installer's CloseApplications setting would close this app for
         us anyway if we didn't, but closing it ourselves here means the
         window goes away on its own terms instead of being killed out
-        from under the user.
+        from under the user. This must be a real exit, not just
+        page.window.close(): with "Run in background" on,
+        page.window.prevent_close makes close() hide to the tray instead
+        of quitting (see toolblox/app.py's on_window_event), which would
+        leave this process running and its files locked right as the
+        installer tries to overwrite them. See tray.py's _quit() for the
+        same prevent_close-bypassing pattern used from the tray menu.
         """
         info = page.session.store.get(_UPDATE_INFO_KEY)
         if info is None:
@@ -206,7 +213,10 @@ def SettingsView(page: ft.Page) -> ft.View:
             rebuild_settings()
             return
         run_installer(installer_path)
-        await page.window.close()
+        tray.hide()
+        stop_all_processes(page)
+        page.window.prevent_close = False
+        await page.window.destroy()
 
     def on_place_id_blur(e: ft.Event[ft.TextField]):
         """Parse a pasted place URL or id, and save the extracted id."""
