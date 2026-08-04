@@ -379,8 +379,7 @@ def SettingsView(page: ft.Page) -> ft.View:
                 "Running from a source checkout, so widgets are also "
                 f"loaded straight from {widgets_dir or 'this repo'}, and "
                 "the Catalogue reads this repo's own registry.json - no "
-                "install step, no push, needed to see a change. See "
-                "CLAUDE.md's Developer mode section."
+                "install step, no push, needed to see a change."
             ),
             ft.Row(
                 [
@@ -497,8 +496,13 @@ def SettingsView(page: ft.Page) -> ft.View:
                                     text_label("Run in background"),
                                     text_caption(
                                         "Closing the window keeps Toolblox running in the "
-                                        "hidden icons section instead of closing it. Quit "
-                                        "from there to close it fully."
+                                        + (
+                                            "menu bar"
+                                            if sys.platform == "darwin"
+                                            else "hidden icons section"
+                                        )
+                                        + " instead of closing it. Quit from there to close "
+                                        "it fully."
                                     ),
                                 ],
                                 spacing=SPACE_XS,

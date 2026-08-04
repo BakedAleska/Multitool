@@ -5,7 +5,7 @@ from typing import NamedTuple
 
 import flet as ft
 
-from toolblox.devtools import is_dev_environment
+from toolblox.devtools import has_canary_access, is_dev_environment
 from toolblox.state import get_active_theme, get_nav_position, is_named_theme_active
 from toolblox.theme import BACKGROUND_FIT_MAP
 from toolblox.ui.style import SPACE_MD, SPACE_SM, SPACE_XS, radius_card
@@ -230,8 +230,14 @@ def build_layout(page: ft.Page, content: ft.Control) -> ft.Control:
             tooltip=(
                 "Running from a source checkout, on the Canary channel: "
                 "widgets and the Catalogue load straight from this repo "
-                "instead of an installed copy. See CLAUDE.md's Developer "
-                "mode section."
+                "instead of an installed copy."
+                if has_canary_access()
+                else (
+                    "Running from a source checkout. Widgets load straight "
+                    "from this repo, but the Canary channel (and its "
+                    "Catalogue) needs an explicit opt-in - see "
+                    "CONTRIBUTING.md."
+                )
             ),
         ),
         right=8,
