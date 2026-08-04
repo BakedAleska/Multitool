@@ -6,8 +6,18 @@ over the existing installation. Updating is the same installer flow again,
 just triggered from inside the running app instead of by hand: download the
 latest release's installer exe, launch it, and close so it can replace
 files that are currently in use.
+
+.github/workflows/release.yml publishes a `<installer>.sha256` text file
+alongside every installer exe. download_installer() fetches that companion
+file and checks the downloaded exe's digest against it before returning,
+so a tampered or corrupted asset never reaches run_installer(). This
+doesn't replace code signing (the release itself could still be
+compromised at the source), but it does mean the exe that runs is
+byte-for-byte what the release published, not something altered in
+transit or by a bad mirror.
 """
 
+import hashlib
 import re
 import subprocess
 import sys
@@ -39,14 +49,15 @@ class UpdateInfo:
     version: str
     download_url: str
     release_notes: str
+    sha256_url: Optional[str] = None
 
 
 def _version_key(raw: str) -> tuple:
-    """An ordering key for versions like "0.1.0-alpha", "1.2.0", or "v1.0.0".
+    """An ordering key for versions like "0.1.0-beta", "1.2.0", or "v1.0.0".
 
     Splits the dot-separated numeric part into ints and treats a
-    "-suffix" (e.g. "alpha", "rc1") as older than the same numbers with no
-    suffix, so "1.0.0" outranks "1.0.0-alpha". Not a full semver parser,
+    "-suffix" (e.g. "beta", "rc1") as older than the same numbers with no
+    suffix, so "1.0.0" outranks "1.0.0-beta". Not a full semver parser,
     but enough to order this project's own release tags.
     """
     raw = raw.lstrip("vV")
@@ -91,10 +102,13 @@ def check_for_update() -> Optional[UpdateInfo]:
         return None
 
     download_url = None
+    sha256_url = None
     for asset in data.get("assets") or []:
-        if INSTALLER_ASSET_PATTERN.match(asset.get("name") or ""):
+        name = asset.get("name") or ""
+        if INSTALLER_ASSET_PATTERN.match(name):
             download_url = asset.get("browser_download_url")
-            break
+        elif name.endswith(".sha256") and INSTALLER_ASSET_PATTERN.match(name[: -len(".sha256")]):
+            sha256_url = asset.get("browser_download_url")
 
     if not download_url:
         raise UpdateError(
@@ -105,20 +119,52 @@ def check_for_update() -> Optional[UpdateInfo]:
         version=tag.lstrip("vV"),
         download_url=download_url,
         release_notes=str(data.get("body") or ""),
+        sha256_url=sha256_url,
     )
+
+
+def _fetch_expected_sha256(sha256_url: str) -> str:
+    """Fetch and parse the plain-text sha256 digest published alongside an installer.
+
+    Raises UpdateError with a user-facing message on any failure.
+    """
+    try:
+        response = httpx.get(sha256_url, timeout=15)
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        logger.warning("Couldn't download update checksum: %s", e)
+        raise UpdateError(f"Couldn't verify the update. Is your connection working? ({e})") from e
+
+    digest = response.text.strip().split()[0].lower()
+    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise UpdateError("The update's published checksum looks malformed.")
+    return digest
 
 
 def download_installer(update: UpdateInfo) -> Path:
     """Download an update's installer exe to a temp file. Blocking.
 
     Call via asyncio.to_thread. Raises UpdateError with a user-facing
-    message on any failure. The caller owns the returned path and should
-    hand it to run_installer() or clean it up itself.
+    message on any failure, including a checksum mismatch against the
+    `<installer>.sha256` file released alongside the exe - see this
+    module's docstring. If the release has no checksum asset at all
+    (shouldn't happen for a release built by release.yml, but could for
+    a hand-crafted one), the download is rejected rather than silently
+    trusted. The caller owns the returned path and should hand it to
+    run_installer() or clean it up itself.
     """
+    if not update.sha256_url:
+        raise UpdateError(
+            "This release has no published checksum for its installer. "
+            "Refusing to run it - was it published outside the normal release workflow?"
+        )
+    expected_sha256 = _fetch_expected_sha256(update.sha256_url)
+
     fd, tmp_name = tempfile.mkstemp(prefix="ToolbloxSetup-", suffix=".exe")
     tmp_path = Path(tmp_name)
 
     try:
+        hasher = hashlib.sha256()
         with open(fd, "wb") as f:
             try:
                 with httpx.stream(
@@ -131,11 +177,24 @@ def download_installer(update: UpdateInfo) -> Path:
                         if total > MAX_DOWNLOAD_BYTES:
                             raise UpdateError("The installer download exceeded the size limit.")
                         f.write(chunk)
+                        hasher.update(chunk)
             except httpx.HTTPError as e:
                 logger.warning("Couldn't download update installer: %s", e)
                 raise UpdateError(
                     f"Couldn't download the update. Is your connection working? ({e})"
                 ) from e
+
+        digest = hasher.hexdigest()
+        if digest != expected_sha256:
+            logger.warning(
+                "Update installer checksum mismatch (expected %s, got %s)",
+                expected_sha256,
+                digest,
+            )
+            raise UpdateError(
+                "The downloaded update didn't match its published checksum. "
+                "Try again, or download it directly from the Releases page."
+            )
     except Exception:
         tmp_path.unlink(missing_ok=True)
         raise

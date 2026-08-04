@@ -121,10 +121,22 @@ def install_widget(entry: CatalogEntry) -> None:
     staging_dir = WIDGETS_DIR / f".tmp_{entry.id}_{uuid.uuid4().hex}"
     staging_dir.mkdir()
 
+    staging_root = staging_dir.resolve()
+
     try:
         for member in members:
             relative = member[len(prefix) :]
             target = staging_dir / relative
+            if staging_root not in target.resolve().parents and target.resolve() != staging_root:
+                logger.warning(
+                    "Install of '%s' aborted: archive member '%s' escapes the staging directory",
+                    entry.id,
+                    member,
+                )
+                raise WidgetInstallError(
+                    "The downloaded archive contained an unsafe file path. "
+                    "Is the registry entry pointing at the right source?"
+                )
             if member.endswith("/"):
                 target.mkdir(parents=True, exist_ok=True)
             else:
