@@ -1,5 +1,5 @@
 toolblox
-=========
+========
 
 .. toctree::
    :maxdepth: 4

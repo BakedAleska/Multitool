@@ -1,5 +1,5 @@
 toolblox.widgets namespace
-===========================
+==========================
 
 .. py:module:: toolblox.widgets
 

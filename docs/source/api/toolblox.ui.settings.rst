@@ -1,5 +1,5 @@
 toolblox.ui.settings module
-============================
+===========================
 
 .. automodule:: toolblox.ui.settings
    :members:

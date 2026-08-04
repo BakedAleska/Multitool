@@ -1,5 +1,5 @@
 toolblox.tray module
-=====================
+====================
 
 .. automodule:: toolblox.tray
    :members:

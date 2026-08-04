@@ -1,5 +1,5 @@
 toolblox.data.crypto module
-============================
+===========================
 
 .. automodule:: toolblox.data.crypto
    :members:

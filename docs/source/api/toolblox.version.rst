@@ -1,5 +1,5 @@
 toolblox.version module
-========================
+=======================
 
 .. automodule:: toolblox.version
    :members:

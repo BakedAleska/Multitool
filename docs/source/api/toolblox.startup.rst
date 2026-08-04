@@ -1,5 +1,5 @@
 toolblox.startup module
-========================
+=======================
 
 .. automodule:: toolblox.startup
    :members:

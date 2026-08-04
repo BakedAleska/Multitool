@@ -1,5 +1,5 @@
 toolblox.widgets.catalog module
-================================
+===============================
 
 .. automodule:: toolblox.widgets.catalog
    :members:

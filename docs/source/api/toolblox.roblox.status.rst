@@ -1,7 +1,7 @@
-toolblox.roblox.detect module
+toolblox.roblox.status module
 =============================
 
-.. automodule:: toolblox.roblox.detect
+.. automodule:: toolblox.roblox.status
    :members:
    :show-inheritance:
    :undoc-members:

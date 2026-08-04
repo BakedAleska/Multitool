@@ -1,5 +1,5 @@
 toolblox.logs module
-=====================
+====================
 
 .. automodule:: toolblox.logs
    :members:

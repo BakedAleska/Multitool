@@ -1,5 +1,5 @@
 toolblox.config module
-=======================
+======================
 
 .. automodule:: toolblox.config
    :members:

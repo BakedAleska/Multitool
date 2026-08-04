@@ -1,5 +1,5 @@
 toolblox.widgets.loader module
-===============================
+==============================
 
 .. automodule:: toolblox.widgets.loader
    :members:

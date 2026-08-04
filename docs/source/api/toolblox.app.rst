@@ -1,5 +1,5 @@
 toolblox.app module
-====================
+===================
 
 .. automodule:: toolblox.app
    :members:

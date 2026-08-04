@@ -1,5 +1,5 @@
 toolblox.ui.accounts module
-============================
+===========================
 
 .. automodule:: toolblox.ui.accounts
    :members:

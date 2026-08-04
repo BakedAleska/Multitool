@@ -1,5 +1,5 @@
 toolblox.ui.dashboard module
-=============================
+============================
 
 .. automodule:: toolblox.ui.dashboard
    :members:

@@ -1,5 +1,5 @@
 toolblox.theme module
-======================
+=====================
 
 .. automodule:: toolblox.theme
    :members:

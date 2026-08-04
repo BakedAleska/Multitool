@@ -1,5 +1,5 @@
 toolblox.data namespace
-========================
+=======================
 
 .. py:module:: toolblox.data
 

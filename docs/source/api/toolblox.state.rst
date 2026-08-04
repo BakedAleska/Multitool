@@ -1,5 +1,5 @@
 toolblox.state module
-======================
+=====================
 
 .. automodule:: toolblox.state
    :members:

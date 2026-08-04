@@ -1,8 +1,9 @@
 """Sphinx configuration for the Toolblox documentation.
 
-Docs are built from docstrings via ``sphinx.ext.autodoc``. Run
-``sphinx-apidoc`` and ``sphinx-build`` as described in the project's
-CLAUDE.md whenever modules are added, removed, or renamed.
+Docs are built from docstrings via ``sphinx.ext.autodoc``. Regenerate the
+``api/*.rst`` stubs with ``sphinx-apidoc --implicit-namespaces -f -e -o
+docs/source/api toolblox`` whenever modules are added, removed, or
+renamed, then rebuild with ``sphinx-build -b html docs/source docs/build``.
 
 ``exclude_patterns`` drops sphinx-apidoc's own aggregator pages
 (``toolblox namespace``, ``toolblox.data namespace``, and so on) from

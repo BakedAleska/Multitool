@@ -1,5 +1,5 @@
 toolblox namespace
-===================
+==================
 
 .. py:module:: toolblox
 
@@ -22,6 +22,7 @@ Submodules
 
    toolblox.app
    toolblox.config
+   toolblox.devtools
    toolblox.logs
    toolblox.startup
    toolblox.state

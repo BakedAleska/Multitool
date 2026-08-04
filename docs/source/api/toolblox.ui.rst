@@ -1,5 +1,5 @@
 toolblox.ui namespace
-======================
+=====================
 
 .. py:module:: toolblox.ui
 

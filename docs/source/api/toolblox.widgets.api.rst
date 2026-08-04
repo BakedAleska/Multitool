@@ -1,5 +1,5 @@
 toolblox.widgets.api module
-============================
+===========================
 
 .. automodule:: toolblox.widgets.api
    :members:

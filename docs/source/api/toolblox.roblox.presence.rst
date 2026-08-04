@@ -1,7 +1,7 @@
-toolblox.ui.join\_action module
+toolblox.roblox.presence module
 ===============================
 
-.. automodule:: toolblox.ui.join_action
+.. automodule:: toolblox.roblox.presence
    :members:
    :show-inheritance:
    :undoc-members:

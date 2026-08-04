@@ -1,5 +1,5 @@
 toolblox.ui.widgets module
-===========================
+==========================
 
 .. automodule:: toolblox.ui.widgets
    :members:

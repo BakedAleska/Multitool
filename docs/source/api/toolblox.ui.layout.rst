@@ -1,5 +1,5 @@
 toolblox.ui.layout module
-==========================
+=========================
 
 .. automodule:: toolblox.ui.layout
    :members:
