@@ -76,6 +76,17 @@ def _build_windows() -> Path:
     exe, matching how installer/Toolblox.iss extracts its downloaded
     zip straight into {app} - a single-file exe would have nowhere to
     put the native helper or the assets/ folder alongside it.
+
+    --collect-all pythonnet/clr_loader: pywebview's Windows backend
+    loads the .NET runtime through pythonnet and clr_loader.
+    PyInstaller's static import analysis only grabs their importable
+    modules, not the runtime config and support files clr_loader needs
+    to actually initialize the CLR at startup. Without them, the exe
+    still builds and imports fine, but fails at runtime on a clean
+    machine with "Failed to resolve Python.Runtime.Loader.Initialize"
+    the first time a user opens the Roblox login window - the exact
+    failure a clean machine hits that a dev environment with .NET
+    tooling already installed doesn't.
     """
     helper = (
         REPO_ROOT / "native" / "multi_instance_helper" / "multi_instance_helper.exe"
@@ -108,6 +119,9 @@ def _build_windows() -> Path:
             f"{helper}:native",
             "--distpath",
             str(DIST_DIR),
+            "--pyinstaller-build-args",
+            "--collect-all=pythonnet",
+            "--collect-all=clr_loader",
         ]
     )
     return DIST_DIR / "Toolblox"
