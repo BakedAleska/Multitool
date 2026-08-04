@@ -132,7 +132,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [build-macos, installer]
+    needs: [version, build-macos, installer]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
@@ -145,6 +145,7 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
+          name: "Toolblox ${{ needs.version.outputs.app-version }}"
           draft: true
           files: dist/*
           body: |
