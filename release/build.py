@@ -87,6 +87,14 @@ def _build_windows() -> Path:
     the first time a user opens the Roblox login window - the exact
     failure a clean machine hits that a dev environment with .NET
     tooling already installed doesn't.
+
+    Each --collect-all value below is its own repeated
+    --pyinstaller-build-args=<value> rather than one occurrence with
+    both values space-separated: flet-cli's --pyinstaller-build-args
+    uses argparse's nargs="*", which refuses to consume a "-"-prefixed
+    token as a plain value (it reads as an unrecognized flag instead)
+    unless it's attached with "=" - and that "=" form only ever
+    supplies one value per occurrence of the flag.
     """
     helper = (
         REPO_ROOT / "native" / "multi_instance_helper" / "multi_instance_helper.exe"
@@ -119,9 +127,8 @@ def _build_windows() -> Path:
             f"{helper}:native",
             "--distpath",
             str(DIST_DIR),
-            "--pyinstaller-build-args",
-            "--collect-all=pythonnet",
-            "--collect-all=clr_loader",
+            "--pyinstaller-build-args=--collect-all=pythonnet",
+            "--pyinstaller-build-args=--collect-all=clr_loader",
         ]
     )
     return DIST_DIR / "Toolblox"
