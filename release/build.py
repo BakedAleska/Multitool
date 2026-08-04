@@ -33,6 +33,11 @@ from toolblox.version import APP_VERSION  # noqa: E402
 
 DIST_DIR = REPO_ROOT / "dist"
 BUILD_DIR = REPO_ROOT / "build"
+UPDATER_HELPER_BUILD_DIR = REPO_ROOT / "updater_helper_build"
+"""Scratch dir for _build_updater_helper(), deliberately outside DIST_DIR
+and BUILD_DIR - `flet pack` unconditionally wipes both of those (even
+in non-interactive mode) before it builds, which would delete the
+helper's output right back out from under it if it lived in either."""
 
 
 def _numeric_version() -> str:
@@ -80,8 +85,11 @@ def _build_updater_helper() -> Path:
     PyInstaller directly instead. --onefile since this is one small exe
     to --add-binary into the main build below, not something that needs
     its own folder of files.
+
+    Built under UPDATER_HELPER_BUILD_DIR - see that constant for why
+    neither DIST_DIR nor BUILD_DIR is safe to use here.
     """
-    helper_dist = DIST_DIR / "updater_helper"
+    helper_dist = UPDATER_HELPER_BUILD_DIR / "dist"
     subprocess.run(
         [
             sys.executable,
@@ -95,9 +103,9 @@ def _build_updater_helper() -> Path:
             "--distpath",
             str(helper_dist),
             "--workpath",
-            str(BUILD_DIR / "updater_helper"),
+            str(UPDATER_HELPER_BUILD_DIR / "work"),
             "--specpath",
-            str(BUILD_DIR / "updater_helper"),
+            str(UPDATER_HELPER_BUILD_DIR / "work"),
             "-y",
         ],
         cwd=REPO_ROOT,
@@ -235,8 +243,8 @@ def main() -> None:
     """Build this platform's package, zip it, and print its sha256.
 
     Dispatches on the host OS rather than cross-compiling. Removes
-    PyInstaller's own build/ scratch directory, and the intermediate
-    dist/updater_helper/ produced by _build_updater_helper, afterward so
+    PyInstaller's own build/ scratch directory, and
+    UPDATER_HELPER_BUILD_DIR if _build_updater_helper ran, afterward so
     neither lingers between runs; dist/ (the zip itself) is left in
     place.
     """
@@ -256,9 +264,8 @@ def main() -> None:
 
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
-    updater_helper_dist = DIST_DIR / "updater_helper"
-    if updater_helper_dist.exists():
-        shutil.rmtree(updater_helper_dist)
+    if UPDATER_HELPER_BUILD_DIR.exists():
+        shutil.rmtree(UPDATER_HELPER_BUILD_DIR)
 
     with zip_path.open("rb") as f:
         digest = hashlib.file_digest(f, "sha256").hexdigest()

@@ -5,6 +5,7 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+updater_helper_build/
 *.spec
 
 # Virtual environment
