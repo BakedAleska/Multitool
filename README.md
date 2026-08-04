@@ -47,18 +47,23 @@ pyright
 
 The Sphinx API documentation lives on the `docs` branch, not `main`.
 
-## Preparing for beta
+## Preparing for alpha
 
-This project is preparing for its first beta release. Two things follow
+This project is preparing for its first alpha release. Two things follow
 from that:
 
 - Every change should be verified and cross-checked against the existing
   codebase before it's written. Check whether a problem is already solved
   somewhere in the app rather than adding a roundabout new solution next
   to an existing one.
-- The three widgets shipping with the beta are Autohotkey, Autoclicker,
+- The three widgets shipping with the alpha are Autohotkey, Autoclicker,
   and Image Overlay. The Rogue Lineage widget in `widgets/rogue_lineage/`
-  is for personal use only and isn't part of the beta release.
+  is for personal use only and isn't part of the alpha release.
+- The alpha is the "alpha" release channel (see
+  `toolblox.devtools.release_channel`): no Catalogue, a curated widget
+  set. Running from a source checkout is the "canary" channel instead -
+  Catalogue enabled, today's widgets, expect breakage. See CLAUDE.md's
+  Developer mode section.
 
 ## Widget development
 

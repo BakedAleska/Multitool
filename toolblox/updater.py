@@ -42,11 +42,11 @@ class UpdateInfo:
 
 
 def _version_key(raw: str) -> tuple:
-    """An ordering key for versions like "0.1.0-beta", "1.2.0", or "v1.0.0".
+    """An ordering key for versions like "0.1.0-alpha", "1.2.0", or "v1.0.0".
 
     Splits the dot-separated numeric part into ints and treats a
-    "-suffix" (e.g. "beta", "rc1") as older than the same numbers with no
-    suffix, so "1.0.0" outranks "1.0.0-beta". Not a full semver parser,
+    "-suffix" (e.g. "alpha", "rc1") as older than the same numbers with no
+    suffix, so "1.0.0" outranks "1.0.0-alpha". Not a full semver parser,
     but enough to order this project's own release tags.
     """
     raw = raw.lstrip("vV")
