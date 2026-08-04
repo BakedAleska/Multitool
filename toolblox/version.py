@@ -5,4 +5,4 @@ each release. toolblox.updater compares this against GitHub's latest
 release tag to decide whether an update is available.
 """
 
-APP_VERSION = "0.1.3-beta"
+APP_VERSION = "0.1.4-beta"
